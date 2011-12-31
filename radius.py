@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 '''
-$Id: radius.py,v 1.6 2001/10/13 01:30:38 zenzen Exp $
-
 Extremly basic RADIUS authentication. Bare minimum required to authenticate
 a user, yet remain RFC2138 compliant (I hope). 
 
-Homepage at http://py-radius.sourceforge.net
+Homepage at http://github.com/btimby/py-radius/
 '''
 # Copyright (c) 1999, Stuart Bishop <zen@shangri-la.dropbear.id.au> 
 # All rights reserved.

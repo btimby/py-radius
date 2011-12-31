@@ -1,5 +1,3 @@
-$Id: README.txt,v 1.2 2000/11/07 22:22:25 zenzen Exp $
-
 RADIUS authentication module for Python 1.5.2+
 
 (c) 1999 Stuart Bishop <zen@shangri-la.dropbear.id.au>
