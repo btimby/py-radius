@@ -1,16 +1,9 @@
-'''
-$Id: setup.py,v 1.2 2001/10/13 01:30:38 zenzen Exp $
-Distribution setup script
-'''
+#!/bin/env python
 
 from distutils.core import setup
 
 import radius
 
-me = 'Stuart Bishop'
-memail = 'zen@shangri-la.dropbear.id.au'
-ldesc = 'A pure Python module that implements client side RADIUS ' \
-	'authentication, as defined by RFC2138.'
 licence = '''
 Copyright (c) 1999, Stuart Bishop <zen@shangri-la.dropbear.id.au> 
 All rights reserved.
@@ -44,15 +37,17 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 '''
 
-setup (
+setup(
     name = 'py-radius', 
     version = radius.__version__, 
     description = 'RADIUS authentication module',
-    long_description = ldesc,
-    author = me,
-    author_email = memail,
-    maintainer = me,
-    maintainer_email = memail,
-    url = 'http://py-radius.sourceforge.org',
+    long_description = 'A pure Python module that implements client side RADIUS ' \
+                       'authentication, as defined by RFC2138.',
+    author = 'Stuart Bishop',
+    author_email = 'zen@shangri-la.dropbear.id.au',
+    maintainer = 'Ben Timby',
+    maintainer_email = 'btimby@gmail.com',
+    url = 'http://github.com/btimby/py-radius/',
     licence = licence,
-    py_modules = ["radius"])
+    py_modules = ["radius"]
+)
