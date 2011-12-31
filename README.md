@@ -24,18 +24,18 @@ Usage
 The radius.py module can be run from the command line, providing a minimal
 RADIUS client to test out RADIUS servers:
 
-    python radius.py
+    $ python radius.py
 
 
 The module defines the following items:
 
-    authenticate(username, password,secret,host='radius',port=1645)
+    authenticate(username, password, secret, host='radius', port=1645)
 
 A simple, thread safe function to authenticate off a RADIUS
 server with the minimum possible fuss. Returns 1 on success,
 0 on failure. May throw a NoResponse or SocketError exception.
 
-    RADIUS(secret,host='radius',port=1645)
+    RADIUS(secret, host='radius', port=1645)
 
 Return a new instance of the RADIUS class. RADIUS objects
 provide a more efficient interface if your code makes many
@@ -43,36 +43,36 @@ calls to the same RADIUS server. RADIUS objects should not
 be shared between threads, unless only one thread accesses
 the authenticate method at a time.
 
-NoResponse
+    NoResponse
 
 Exception thrown if no response or no valid responses are
 received.
 
-SocketError
+    SocketError
 
 Subclass of NoResponse. Exception thrown if an exception is
 thrown from Python's socket module.
 
 RADIUS instances have the following methods and attributes available:
 
-authenticate(username,password)
+    authenticate(username, password)
 
 Authenticate a username/password combination. Returns 1 on
 success or 0 on failure. May throw a NoResponse or SocketError
 exception.
 
-closesocket()
+    closesocket()
 
 Close the outgoing UDP socket. Called automatically in the
 RADIUS instance's destructor. 
 
-retries
+    retries
 
 The number of times the authenticate method tries to 
 authenticate before returning a NoResponse exception. Defaults
 to 3.
 
-timeout
+    timeout
 
 The number of seconds the authenticate method waits for
 a response from the RADIUS server before giving up and
