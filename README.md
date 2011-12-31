@@ -8,76 +8,79 @@ server.
 
 
 Installation
+-----
 
-    The following command will install radius.py into your Python
-    modules library:
+The following command will install radius.py into your Python
+modules library:
 
-	python setup.py install
+    python setup.py install
 
-    This command will generally need to be run with an administrative
-    level account (root under Unix, Administrator under NT etc.).
+This command will generally need to be run with an administrative
+level account (root under Unix, Administrator under NT etc.).
 
 Usage
+-----
 
-    The radius.py module can be run from the command line, providing a minimal
-    RADIUS client to test out RADIUS servers:
+The radius.py module can be run from the command line, providing a minimal
+RADIUS client to test out RADIUS servers:
 
-	python radius.py
+    python radius.py
 
 
-    The module defines the following items:
+The module defines the following items:
 
-	authenticate(username,password,secret,host='radius',port=1645)
+    authenticate(username, password,secret,host='radius',port=1645)
 
-	    A simple, thread safe function to authenticate off a RADIUS
-	    server with the minimum possible fuss. Returns 1 on success,
-	    0 on failure. May throw a NoResponse or SocketError exception.
+A simple, thread safe function to authenticate off a RADIUS
+server with the minimum possible fuss. Returns 1 on success,
+0 on failure. May throw a NoResponse or SocketError exception.
 
-	RADIUS(secret,host='radius',port=1645)
+    RADIUS(secret,host='radius',port=1645)
 
-	    Return a new instance of the RADIUS class. RADIUS objects
-	    provide a more efficient interface if your code makes many
-	    calls to the same RADIUS server. RADIUS objects should not
-	    be shared between threads, unless only one thread accesses
-	    the authenticate method at a time.
+Return a new instance of the RADIUS class. RADIUS objects
+provide a more efficient interface if your code makes many
+calls to the same RADIUS server. RADIUS objects should not
+be shared between threads, unless only one thread accesses
+the authenticate method at a time.
 
-	NoResponse
+NoResponse
 
-	    Exception thrown if no response or no valid responses are
-	    received.
+Exception thrown if no response or no valid responses are
+received.
 
-	SocketError
-	
-	    Subclass of NoResponse. Exception thrown if an exception is
-	    thrown from Python's socket module.
+SocketError
 
-    RADIUS instances have the following methods and attributes available:
+Subclass of NoResponse. Exception thrown if an exception is
+thrown from Python's socket module.
 
-	authenticate(username,password)
+RADIUS instances have the following methods and attributes available:
 
-	    Authenticate a username/password combination. Returns 1 on
-	    success or 0 on failure. May throw a NoResponse or SocketError
-	    exception.
+authenticate(username,password)
 
-	closesocket()
+Authenticate a username/password combination. Returns 1 on
+success or 0 on failure. May throw a NoResponse or SocketError
+exception.
 
-	    Close the outgoing UDP socket. Called automatically in the
-	    RADIUS instance's destructor. 
-	
-	retries
+closesocket()
 
-	    The number of times the authenticate method tries to 
-	    authenticate before returning a NoResponse exception. Defaults
-	    to 3.
+Close the outgoing UDP socket. Called automatically in the
+RADIUS instance's destructor. 
 
-	timeout
+retries
 
-	    The number of seconds the authenticate method waits for
-	    a response from the RADIUS server before giving up and
-	    retrying. Defaults to 5.
+The number of times the authenticate method tries to 
+authenticate before returning a NoResponse exception. Defaults
+to 3.
 
-	    
+timeout
+
+The number of seconds the authenticate method waits for
+a response from the RADIUS server before giving up and
+retrying. Defaults to 5.
+
+
 Example
+-----
 
     #!/bin/env python
     from getpass import getpass
