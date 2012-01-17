@@ -1,0 +1,17 @@
+Source: python-pyradius
+Section: python
+Priority: optional
+Maintainer: Luiz Viana <luizxx@gmail.com>
+Build-Depends: debhelper (>= 5.0.37.2), cdbs (>= 0.4.43), python (>= 2.3.5-11), python-support (>= 0.4), python-setuptools
+Standards-Version: 3.9.1
+Homepage: https://github.com/btimby/py-radius
+Vcs-Browser: https://github.com/btimby/py-radius
+
+Package: python-pyradius
+Architecture: all
+Depends: ${misc:Depends}, ${python:Depends}
+Provides: ${python:Provides}, pyradius
+Description: RADIUS authentication module for Python 1.5.2+
+ This module provides basic RADIUS client capabilities,
+ allowing your Python code to authenticate against any
+ RFC2138 compliant RADIUS server.
