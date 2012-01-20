@@ -18,6 +18,16 @@ modules library:
 This command will generally need to be run with an administrative
 level account (root under Unix, Administrator under NT etc.).
 
+RPM Package
+-----
+
+You can build an RPM package for py-radius using the following procedure.
+
+    $ mkdir -p $HOME/rpmbuild/SOURCES
+    $ python setup.py sdist
+    $ cp dist/*.tar.gz $HOME/rpmbuild/SOURCES
+    $ rpmbuild -ba py-radius.spec
+
 Usage
 -----
 

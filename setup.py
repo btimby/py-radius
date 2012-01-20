@@ -1,8 +1,12 @@
 #!/bin/env python
 
 from distutils.core import setup
-
 import radius
+
+name = 'py-radius'
+version = radius.__version__
+release = '1'
+versrel = version + '-' + release
 
 license = '''
 Copyright (c) 1999, Stuart Bishop <zen@shangri-la.dropbear.id.au> 
@@ -38,8 +42,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 '''
 
 setup(
-    name = 'py-radius', 
-    version = radius.__version__, 
+    name = name,
+    version = versrel,
     description = 'RADIUS authentication module',
     long_description = 'A pure Python module that implements client side RADIUS ' \
                        'authentication, as defined by RFC2138.',
@@ -51,3 +55,4 @@ setup(
     license = license,
     py_modules = ["radius"]
 )
+
