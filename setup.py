@@ -4,7 +4,7 @@ from distutils.core import setup
 
 import radius
 
-licence = '''
+license = '''
 Copyright (c) 1999, Stuart Bishop <zen@shangri-la.dropbear.id.au> 
 All rights reserved.
 
@@ -48,6 +48,6 @@ setup(
     maintainer = 'Ben Timby',
     maintainer_email = 'btimby@gmail.com',
     url = 'http://github.com/btimby/py-radius/',
-    licence = licence,
+    license = license,
     py_modules = ["radius"]
 )
