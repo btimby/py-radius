@@ -7,6 +7,8 @@ name = 'py-radius'
 version = radius.__version__
 release = '1'
 versrel = version + '-' + release
+download_url = 'https://github.com/downloads/btimby/' + name + \
+                           '/' + name + '-' + versrel + '.tar.gz'
 
 license = '''
 Copyright (c) 1999, Stuart Bishop <zen@shangri-la.dropbear.id.au> 
@@ -51,7 +53,8 @@ setup(
     author_email = 'zen@shangri-la.dropbear.id.au',
     maintainer = 'Ben Timby',
     maintainer_email = 'btimby@gmail.com',
-    url = 'http://github.com/btimby/py-radius/',
+    url = 'http://github.com/btimby/' + name + '/',
+    download_url = download_url,
     license = license,
     py_modules = ["radius"]
 )
