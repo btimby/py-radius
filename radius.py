@@ -112,11 +112,12 @@ class RADIUS:
 
         # Encrypted text is just an xor with the above md5 hash,
         # although it gets more complex if len(text) > 16
-        for i in range(0,len(text)):
+        # RFC says that password should be <=128
+        for i in range(0,len(text[:128])):
 
             # Handle text > 16 characters acording to RFC
             if (i % 16) == 0 and i <> 0:
-                md5vec = md5(self._secret + r[-16:]).digest()
+                md5vec += md5(self._secret + r[-16:]).digest()
 
             r = r + chr( ord(md5vec[i]) ^ ord(text[i]) )
 
