@@ -104,27 +104,27 @@ class RADIUS:
 
         return apply(pack,v)
 
-    def radcrypt(self,authenticator,text,pad16=0):
+    def radcrypt(self,authenticator,text,pad16=True):
         '''Encrypt a password with the secret'''
-
-        md5vec = md5(self._secret + authenticator).digest()
-        r = ''
-
-        # Encrypted text is just an xor with the above md5 hash,
-        # although it gets more complex if len(text) > 16
-        for i in range(0,len(text)):
-
-            # Handle text > 16 characters acording to RFC
-            if (i % 16) == 0 and i <> 0:
-                md5vec = md5(self._secret + r[-16:]).digest()
-
-            r = r + chr( ord(md5vec[i]) ^ ord(text[i]) )
-
-        # When we encrypt passwords, we want to pad the encrypted text
-        # to a multiple of 16 characters according to the RFC
+        # First, pad the password to multiple of 16 octets.
         if pad16:
-            for i in range(len(r),16):
-                    r = r + md5vec[i]
+            text += chr(0) * (16 - (len(text) % 16))
+        if len(text) > 128:
+            raise Exception('Password exceeds maximun of 128 bytes')
+        r = ''
+        last = authenticator
+        while text:
+            # md5sum the password (secret) with the authenticator,
+            # after the first iteration, the authenticator is the previous
+            # result of our encryption.
+            hash = md5(self._secret + last).digest()
+            for i in range(16):
+                r += chr(ord(hash[i]) ^ ord(text[i]))
+            # The next iteration will act upon the next 16 octets of the password
+            # and the result of our xor operation above. We will set last to
+            # the last 16 octets of our result (the xor we just completed). And
+            # remove the first 16 octets from the password.
+            last, text = r[-16:], text[16:]
         return r
 
     def authenticate(self,uname,passwd):
