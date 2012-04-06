@@ -104,28 +104,27 @@ class RADIUS:
 
         return apply(pack,v)
 
-    def radcrypt(self,authenticator,text,pad16=True):
+    def radcrypt(self,authenticator,text):
         '''Encrypt a password with the secret'''
         # First, pad the password to multiple of 16 octets.
-        if pad16:
-            text += chr(0) * (16 - (len(text) % 16))
+        text += chr(0) * (16 - (len(text) % 16))
         if len(text) > 128:
             raise Exception('Password exceeds maximun of 128 bytes')
-        r = ''
+        result = ''
         last = authenticator
         while text:
-            # md5sum the password (secret) with the authenticator,
+            # md5sum the shared secret with the authenticator,
             # after the first iteration, the authenticator is the previous
             # result of our encryption.
             hash = md5(self._secret + last).digest()
             for i in range(16):
-                r += chr(ord(hash[i]) ^ ord(text[i]))
+                result += chr(ord(hash[i]) ^ ord(text[i]))
             # The next iteration will act upon the next 16 octets of the password
             # and the result of our xor operation above. We will set last to
             # the last 16 octets of our result (the xor we just completed). And
             # remove the first 16 octets from the password.
-            last, text = r[-16:], text[16:]
-        return r
+            last, text = result[-16:], text[16:]
+        return result
 
     def authenticate(self,uname,passwd):
         '''Attempt t authenticate with the given username and password.

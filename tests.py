@@ -56,7 +56,7 @@ class RadcryptTestCase(unittest.TestCase):
         SMALL_PASS = 'I3Zl@"42Xs%^[nk'
         SMALL_CRYPT = '\xdc\xf7V\x82\xeb\xa8Zm\x1b\x92\xb3\xa3\x06\x02\xbc\x16'
         r = radius.RADIUS(TEST_SECRET, TEST_HOST, TEST_PORT)
-        c = r.radcrypt(self.authenticator, SMALL_PASS, pad16=True)
+        c = r.radcrypt(self.authenticator, SMALL_PASS)
         self.assertEqual(c, SMALL_CRYPT)
 
     def test_radcrypt_large(self):
@@ -64,7 +64,7 @@ class RadcryptTestCase(unittest.TestCase):
         LARGE_PASS = '`0T8/Ub\tojdP;\rc:L}#_hOF'
         LARGE_CRYPT = '\xf5\xf4X\xd6\x84\xdf\x0cV,\x8b\xf2\xadfa\xb4,S\xef\x0f\x908\xfcH\x9a\xe9r\xcc\xd0\x07\x84\xdc\x98'
         r = radius.RADIUS(TEST_SECRET, TEST_HOST, TEST_PORT)
-        c = r.radcrypt(self.authenticator, LARGE_PASS, pad16=True)
+        c = r.radcrypt(self.authenticator, LARGE_PASS)
         self.assertEqual(c, LARGE_CRYPT)
 
 
