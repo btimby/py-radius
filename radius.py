@@ -45,7 +45,7 @@ except ImportError:
     from md5 import new as md5
 import socket
 
-__version__ = '1.0.2'
+__version__ = '1.0.3'
 
 # Constants
 ACCESS_REQUEST	= 1
@@ -139,8 +139,8 @@ class RADIUS:
 
             authenticator = self.generateAuthenticator()
 
-            encpass = self.radcrypt(authenticator,passwd,1)
-            
+            encpass = self.radcrypt(authenticator,passwd)
+
             msg = pack('!B B H 16s B B %ds B B %ds' \
                     % (len(uname),len(encpass)),\
                 1,id,
@@ -211,4 +211,3 @@ if __name__ == '__main__':
         print "Authentication Succeeded"
     else:
         print "Authentication Failed"
-
