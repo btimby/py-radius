@@ -1,29 +1,30 @@
 #!/usr/bin/env python
 '''
-Extremly basic RADIUS authentication. Bare minimum required to authenticate
-a user, yet remain RFC2138 compliant (I hope). 
+Basic RADIUS authentication. Minimum necessary to be able to authenticate a
+user with or without challenge/response, yet remain RFC2138 compliant (I hope).
 
 Homepage at http://github.com/btimby/py-radius/
 '''
-# Copyright (c) 1999, Stuart Bishop <zen@shangri-la.dropbear.id.au> 
+
+# Copyright (c) 1999, Stuart Bishop <zen@shangri-la.dropbear.id.au>
 # All rights reserved.
-# 
+#
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
-# 
+#
 #     Redistributions of source code must retain the above copyright
 #     notice, this list of conditions and the following disclaimer.
-# 
+#
 #     Redistributions in binary form must reproduce the above copyright
 #     notice, this list of conditions and the following disclaimer in the
 #     documentation and/or other materials provided with the
 #     distribution.
-# 
-#     The name of Stuart Bishop may not be used to endorse or promote 
-#     products derived from this software without specific prior written 
+#
+#     The name of Stuart Bishop may not be used to endorse or promote
+#     products derived from this software without specific prior written
 #     permission.
-# 
+#
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
 # LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
@@ -36,178 +37,587 @@ Homepage at http://github.com/btimby/py-radius/
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import os
+import socket
+import logging
+import struct
+
 from select import select
-from struct import pack,unpack
 from random import randint
+from contextlib import closing, contextmanager
+
+try:
+    from collections import UserDict
+except ImportError:
+    from UserDict import UserDict
+
 try:
     from hashlib import md5
 except ImportError:
     from md5 import new as md5
-import socket
 
-__version__ = '1.0.3'
 
-# Constants
-ACCESS_REQUEST	= 1
-ACCESS_ACCEPT	= 2
-ACCESS_REJECT	= 3
+__version__ = '1.0.4'
 
+LOGGER = logging.getLogger(__name__)
+LOGGER.addHandler(logging.NullHandler())
+
+# Networking constants.
+# -------------------------------
+PACKET_MAX = 4096
+DEFAULT_PORT = 1812
 DEFAULT_RETRIES = 3
 DEFAULT_TIMEOUT = 5
+# -------------------------------
 
-class Error(Exception): pass
-class NoResponse(Error): pass
-class SocketError(NoResponse): pass
+# Protocol specific constants.
+# -------------------------------
+# Codes indicating packet type.
+CODE_ACCESS_REQUEST = 1
+CODE_ACCESS_ACCEPT = 2
+CODE_ACCESS_REJECT = 3
+CODE_ACCOUNTING_REQUEST = 4
+CODE_ACCOUNTING_RESPONSE = 5
+CODE_ACCESS_CHALLENGE = 11
+CODE_STATUS_SERVER = 12
+CODE_STATUS_CLIENT = 13
+# CODE_RESERVED = 255
 
-def authenticate(username,password,secret,host='radius',port=1645):
-    '''Return 1 for a successful authentication. Other values indicate
-       failure (should only ever be 0 anyway).
+# Map from name to id.
+CODES = {
+    CODE_ACCESS_REQUEST: 'Access-Request',
+    CODE_ACCESS_ACCEPT: 'Access-Accept',
+    CODE_ACCESS_REJECT: 'Access-Reject',
+    CODE_ACCOUNTING_REQUEST: 'Accounting-Request',
+    CODE_ACCOUNTING_RESPONSE: 'Accounting-Response',
+    CODE_ACCESS_CHALLENGE: 'Access-Challenge',
+    CODE_STATUS_SERVER: 'Status-Server',
+    CODE_STATUS_CLIENT: 'Status-Client',
+}
 
-       Can raise either NoResponse or SocketError'''
+CODE_NAMES = {v: k for k, v in CODES.items()}
 
-    r = RADIUS(secret,host,port)
-    return r.authenticate(username,password)
+# Attributes that can be part of the RADIUS payload.
+ATTR_USER_NAME = 1
+ATTR_USER_PASSWORD = 2
+ATTR_CHAP_PASSWORD = 4
+ATTR_NAS_IP_ADDRESS = 4
+ATTR_NAS_PORT = 5
+ATTR_SERVICE_TYPE = 6
+ATTR_FRAMED_PROTOCOL = 7
+ATTR_FRAMED_IP_ADDRESS = 8
+ATTR_FRAMED_IP_NETMASK = 9
+ATTR_FRAMED_ROUTING = 10
+ATTR_FILTER_ID = 11
+ATTR_FRAMED_MTU = 12
+ATTR_FRAMED_COMPRESSION = 13
+ATTR_LOGIN_IP_HOST = 14
+ATTR_LOGIN_SERVICE = 15
+ATTR_LOGIN_TCP_PORT = 16
+# ATTR_UNASSIGNED = 17
+ATTR_REPLY_MESSAGE = 18
+ATTR_CALLBACK_NUMBER = 19
+ATTR_CALLBACK_ID = 20
+# ATTR_UNASSIGNED = 21
+ATTR_FRAMED_ROUTE = 22
+ATTR_FRAMED_IPX_NETWORK = 23
+ATTR_STATE = 24
+ATTR_CLASS = 25
+ATTR_VENDOR_SPECIFIC = 26
+ATTR_SESSION_TIMEOUT = 27
+ATTR_IDLE_TIMEOUT = 28
+ATTR_TERMINATION_ACTION = 29
+ATTR_CALLED_STATION_ID = 30
+ATTR_CALLING_STATION_ID = 31
+ATTR_NAS_IDENTIFIER = 32
+ATTR_PROXY_STATE = 33
+ATTR_LOGIN_LAT_SERVICE = 34
+ATTR_LOGIN_LAT_NODE = 35
+ATTR_LOGIN_LAT_GROUP = 36
+ATTR_FRAMED_APPLETALK_LINK = 37
+ATTR_FRAMED_APPLETALK_NETWORK = 38
+ATTR_FRAMED_APPLETALK_ZONE = 39
+# ATTR_RESERVED = 40-59
+ATTR_CHAP_CHALLENGE = 60
+ATTR_NAS_PORT_TYPE = 61
+ATTR_PORT_LIMIT = 62
+ATTR_LOGIN_LAT_PORT = 63
 
-class RADIUS:
+ATTRS = {
+    ATTR_USER_NAME: 'User-Name',
+    ATTR_USER_PASSWORD: 'User-Password',
+    ATTR_CHAP_PASSWORD: 'CHAP-Password',
+    ATTR_NAS_IP_ADDRESS: 'NAS-IP-Address',
+    ATTR_NAS_PORT: 'NAS-Port',
+    ATTR_SERVICE_TYPE: 'Service-Type',
+    ATTR_FRAMED_PROTOCOL: 'Framed-Protocol',
+    ATTR_FRAMED_IP_ADDRESS: 'Framed-IP-Address',
+    ATTR_FRAMED_IP_NETMASK: 'Framed-IP-NetMask',
+    ATTR_FRAMED_ROUTING: 'Framed-Routing',
+    ATTR_FILTER_ID: 'Filter-Id',
+    ATTR_FRAMED_MTU: 'Framed-MTU',
+    ATTR_FRAMED_COMPRESSION: 'Framed-Compression',
+    ATTR_LOGIN_IP_HOST: 'Login-IP-Host',
+    ATTR_LOGIN_SERVICE: 'Login-Service',
+    ATTR_LOGIN_TCP_PORT: 'Login-TCP-Port',
+    ATTR_REPLY_MESSAGE: 'Reply-Message',
+    ATTR_CALLBACK_NUMBER: 'Callback-Number',
+    ATTR_CALLBACK_ID: 'Callback-Id',
+    ATTR_FRAMED_ROUTE: 'Framed-Route',
+    ATTR_FRAMED_IPX_NETWORK: 'Framed-IPX-Network',
+    ATTR_STATE: 'State',
+    ATTR_CLASS: 'Class',
+    ATTR_VENDOR_SPECIFIC: 'Vendor-Specific',
+    ATTR_SESSION_TIMEOUT: 'Session-Timeout',
+    ATTR_IDLE_TIMEOUT: 'Idle-Timeout',
+    ATTR_TERMINATION_ACTION: 'Termination-Action',
+    ATTR_CALLED_STATION_ID: 'Called-Station-Id',
+    ATTR_CALLING_STATION_ID: 'Calling-Station-Id',
+    ATTR_NAS_IDENTIFIER: 'NAS-Identifier',
+    ATTR_PROXY_STATE: 'Proxy-State',
+    ATTR_LOGIN_LAT_SERVICE: 'Login-LAT-Service',
+    ATTR_LOGIN_LAT_NODE: 'Login-LAT-Node',
+    ATTR_LOGIN_LAT_GROUP: 'Login-LAT-Group',
+    ATTR_FRAMED_APPLETALK_LINK: 'Framed-AppleTalk-Link',
+    ATTR_FRAMED_APPLETALK_NETWORK: 'Framed-AppleTalk-Network',
+    ATTR_FRAMED_APPLETALK_ZONE: 'Framed-AppleTalk-Zone',
+    ATTR_CHAP_CHALLENGE: 'CHAP-Challenge',
+    ATTR_NAS_PORT_TYPE: 'NAS-Port-Type',
+    ATTR_PORT_LIMIT: 'Port-Limit',
+    ATTR_LOGIN_LAT_PORT: 'Login-LAT-Port',
+}
 
-    def __init__(self,secret,host='radius',port=1645):
-        self._secret = secret
-        self._host   = host
-        self._port   = port
+# Map from name to id.
+ATTR_NAMES = {v: k for k, v in ATTRS.items()}
+# -------------------------------
 
-        self.retries = DEFAULT_RETRIES
-        self.timeout = DEFAULT_TIMEOUT
-        self._socket = None
 
-    def __del__(self):
-        self.closesocket()
+class Error(Exception):
+    """
+    Base Error class.
+    """
 
-    def opensocket(self):
-        if self._socket == None:
-            self._socket = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-            self._socket.connect((self._host,self._port))
+    pass
 
-    def closesocket(self):
-        if self._socket is not None:
+
+class NoResponse(Error):
+    """
+    Indicates no valid response received.
+    """
+
+    pass
+
+
+class ChallengeResponse(Error):
+    """
+    Raised when radius replies with a challenge.
+
+    Provides the message(s) if any, as well as the state (if provided).
+
+    There can be 0+ messages. State is either defined or not.
+    """
+    def __init__(self, msg=None, state=None):
+        if msg is None:
+            self.messages = []
+        elif isinstance(msg, list):
+            self.messages = msg
+        else:
+            self.messages = [msg]
+        self.state = state
+
+
+class SocketError(NoResponse):
+    """
+    Indicates general network error.
+    """
+
+    pass
+
+
+def join(items):
+    """
+    Shortcut to join collection of strings.
+    """
+    return ''.join(items)
+
+
+def authenticate(secret, username, password, **kwargs):
+    """
+    Authenticate the user against a radius server.
+
+    Return True if the user successfully logged in and False if not.
+
+    If the server replies with a challenge, a `ChallengeResponse` exception is
+    raised with the challenge.
+
+    Can raise either NoResponse or SocketError
+    """
+    return Radius(secret, **kwargs).authenticate(username, password)
+
+
+def radcrypt(secret, authenticator, password):
+    """Encrypt a password with the secret and authenticator."""
+    # First, pad the password to multiple of 16 octets.
+    password += chr(0) * (16 - (len(password) % 16))
+
+    if len(password) > 128:
+        raise ValueError('Password exceeds maximun of 128 bytes')
+
+    result, last = '', authenticator
+    while password:
+        # md5sum the shared secret with the authenticator,
+        # after the first iteration, the authenticator is the previous
+        # result of our encryption.
+        hash = md5(secret + last).digest()
+        for i in range(16):
+            result += chr(ord(hash[i]) ^ ord(password[i]))
+        # The next iteration will act upon the next 16 octets of the password
+        # and the result of our xor operation above. We will set last to
+        # the last 16 octets of our result (the xor we just completed). And
+        # remove the first 16 octets from the password.
+        last, password = result[-16:], password[16:]
+
+    return result
+
+
+class Attributes(UserDict):
+    """
+    Dictionary-style interface.
+
+    Can retrieve or set values by name or by code. Internally stores items by
+    their assigned code. A given attribute can be present more than once.
+    """
+    def __init__(self, initialdata={}):
+        UserDict.__init__(self, {})
+        # Set keys via update() to invoke validation.
+        self.update(initialdata)
+
+    def __getkeys(self, value):
+        """Return tuple of code, name for given code or name."""
+        if isinstance(value, int):
+            return value, ATTRS[value]
+        else:
+            return ATTR_NAMES[value], value
+
+    def __contains__(self, key):
+        """
+        Override in operator.
+        """
+        code = self.__getkeys(key)[0]
+        return UserDict.__contains__(self, code)
+
+    def __getitem__(self, key):
+        """
+        Retrieve an item from attributes (by name or id).
+        """
+        for k in self.__getkeys(key):
             try:
-                self._socket.close()
-            except socket.error,x:
-                raise SocketError(x)
-            self._socket = None
+                values = UserDict.__getitem__(self, k)
+            except KeyError:
+                continue
+            else:
+                if len(values) == 1:
+                    return values[0]
+                return values
+        raise KeyError(key)
 
-    def generateAuthenticator(self):
-        '''A 16 byte random string'''
-        v = range(0,17)
-        v[0] = '16B'
-        for i in range(1,17):
-            v[i] = randint(1,255)
-
-        return apply(pack,v)
-
-    def radcrypt(self,authenticator,text):
-        '''Encrypt a password with the secret'''
-        # First, pad the password to multiple of 16 octets.
-        text += chr(0) * (16 - (len(text) % 16))
-        if len(text) > 128:
-            raise Exception('Password exceeds maximun of 128 bytes')
-        result = ''
-        last = authenticator
-        while text:
-            # md5sum the shared secret with the authenticator,
-            # after the first iteration, the authenticator is the previous
-            # result of our encryption.
-            hash = md5(self._secret + last).digest()
-            for i in range(16):
-                result += chr(ord(hash[i]) ^ ord(text[i]))
-            # The next iteration will act upon the next 16 octets of the password
-            # and the result of our xor operation above. We will set last to
-            # the last 16 octets of our result (the xor we just completed). And
-            # remove the first 16 octets from the password.
-            last, text = result[-16:], text[16:]
-        return result
-
-    def authenticate(self,uname,passwd):
-        '''Attempt t authenticate with the given username and password.
-           Returns 0 on failure
-           Returns 1 on success
-           Raises a NoResponse (or its subclass SocketError) exception if 
-                no responses or no valid responses are received'''
-
+    def __setitem__(self, key, value):
+        """
+        Add an item to attributes (by name or id)
+        """
         try:
-            self.opensocket()
-            id = randint(0,255)
+            code, name = self.__getkeys(key)
+        except KeyError:
+            raise ValueError('Invalid radius attribute: %s' % key)
+        values = self.get(code, [])
+        values.append(value)
+        UserDict.__setitem__(self, code, values)
 
-            authenticator = self.generateAuthenticator()
+    def update(self, data):
+        """
+        Sets keys via __setitem__() to invoke validation.
+        """
+        for k, v in data.items():
+            self[k] = v
 
-            encpass = self.radcrypt(authenticator,passwd)
+    def nameditems(self):
+        """
+        Yields name value pairs as names (instead of ids).
+        """
+        for k, v in self.items():
+            yield self.__getkeys(k)[1], v
 
-            msg = pack('!B B H 16s B B %ds B B %ds' \
-                    % (len(uname),len(encpass)),\
-                1,id,
-                len(uname)+len(encpass) + 24, # Length of entire message
-                authenticator,
-                1,len(uname)+2,uname,
-                2,len(encpass)+2,encpass)
+    def pack(self):
+        """
+        Packs Attributes instance into data buffer.
+        """
+        data = []
+        for key, values in self.items():
+            for value in values:
+                data.append(struct.pack('BB%ds' % len(value), key,
+                                        len(value) + 2, value))
+        return join(data)
 
-            for i in range(0,self.retries):
-                self._socket.send(msg)
+    @staticmethod
+    def unpack(data):
+        """
+        Unpacks data into Attributes instance.
+        """
+        pos, attrs = 0, {}
+        while pos < len(data):
+            code, l = struct.unpack('BB', data[pos:pos + 2])
+            attrs[code] = data[pos + 2:pos + l]
+            pos += l
+        return Attributes(attrs)
 
-                t = select( [self._socket,],[],[],self.timeout)
-                if len(t[0]) > 0:
-                    response = self._socket.recv(4096)
-                else:
-                    continue
 
-                if ord(response[1]) <> id:
-                    continue
+class Message(object):
+    """
+    Represents a radius protocol packet.
 
-                # Verify the packet is not a cheap forgery or corrupt
-                checkauth = response[4:20]
-                m = md5(response[0:4] + authenticator + response[20:] 
-                    + self._secret).digest()
+    This class can be used for requests and replies. The RFC dictates the
+    format.
 
-                if m <> checkauth:
-                    continue
+     0                   1                   2                   3
+     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |     Code      |  Identifier   |            Length             |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                                                               |
+    |                     Response Authenticator                    |
+    |                                                               |
+    |                                                               |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |  Attributes ...
+    +-+-+-+-+-+-+-+-+-+-+-+-+-
 
-                if ord(response[0]) == ACCESS_ACCEPT:
-                    return 1	
-                else:
-                    return 0
+    Code - one octet, see CODES enum.
+    Identifier - one octet, unique value that represents request/response pair.
+                 Provided by client and echoed by server.
+    Length - two octets, the length of the packet up to the max of 4096.
+    """
 
-        except socket.error,x: # SocketError
-            try: self.closesocket()
-            except: pass
-            raise SocketError(x)
+    def __init__(self, secret, code, id=None, authenticator=None,
+                 attributes=None):
+        self.code = code
+        self.secret = secret
+        self.id = id if id else randint(0, 255)
+        self.authenticator = authenticator if authenticator else os.urandom(16)
+        if isinstance(attributes, dict):
+            attributes = Attributes(attributes)
+        self.attributes = attributes if attributes else Attributes()
 
-        raise NoResponse
+    def pack(self):
+        """Pack the packet into binary form for transport."""
+        # First pack the attributes, since we need to know their length.
+        attrs = self.attributes.pack()
+        data = []
+        # Now pack the code, id, total length, authenticator
+        data.append(struct.pack('!BBH16s', self.code, self.id,
+                    len(attrs) + 20, self.authenticator))
+        # Attributes take up the remainder of the message.
+        data.append(attrs)
+        return join(data)
+
+    @staticmethod
+    def unpack(secret, data):
+        """Unpack the data into it's fields."""
+        code, id, l, authenticator = struct.unpack('!BBH16s', data[:20])
+        if l != len(data):
+            LOGGER.warning('Too much data!')
+        attrs = Attributes.unpack(data[20:l])
+        return Message(secret, code, id, authenticator, attrs)
+
+    def verify(self, data):
+        """
+        Verify and unpack a response.
+
+        Ensures that a message is a valid response to this message, then
+        unpacks it.
+        """
+        id = ord(data[1])
+        assert self.id == id, 'ID mismatch (%s != %s)' % (self.id, id)
+        signature = md5(
+            data[:4] + self.authenticator + data[20:] + self.secret).digest()
+        assert signature == data[4:20], 'Invalid authenticator'
+        return Message.unpack(self.secret, data)
+
+
+def access_request(secret, username, password, **kwargs):
+    """
+    Helper to create access request message.
+
+    Handles creating a new Message, and populating it with the username and
+    password.
+    """
+    m = Message(secret, CODE_ACCESS_REQUEST, **kwargs)
+    m.attributes['User-Name'] = username
+    m.attributes['User-Password'] = radcrypt(secret, m.authenticator, password)
+    return m
+
+
+class Radius(object):
+    """
+    Radius client implementation.
+    """
+
+    def __init__(self, secret, host='radius', port=DEFAULT_PORT,
+                 retries=DEFAULT_RETRIES, timeout=DEFAULT_TIMEOUT):
+        self._secret = secret
+        self.retries = retries
+        self.timeout = timeout
+        self._host = host
+        self._port = port
+
+    @property
+    def host(self):
+        return self._host
+
+    @property
+    def port(self):
+        return self._port
+
+    @property
+    def secret(self):
+        return self._secret
+
+    @contextmanager
+    def connect(self):
+        with closing(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as c:
+            c.connect((self.host, self.port))
+            LOGGER.debug('Connected to %s:%s', self.host, self.port)
+            yield c
+
+    def authenticate(self, username, password, **kwargs):
+        """
+        Attempt to authenticate with the given username and password.
+
+           Returns False on failure
+           Returns True on success
+           Raises a NoResponse (or its subclass SocketError) exception if no
+               responses or no valid responses are received
+        """
+        with self.connect() as c:
+            try:
+                msg = access_request(self.secret, username, password, **kwargs)
+                send = msg.pack()
+
+                for i in range(self.retries):
+                    LOGGER.debug(
+                        'Sending (as hex): %s',
+                        ':'.join(format(ord(c), '02x') for c in send))
+
+                    c.send(send)
+
+                    r, w, x = select([c], [], [], self.timeout)
+                    if c in r:
+                        recv = c.recv(4096)
+                    else:
+                        # No data available on our socket. Try again.
+                        LOGGER.warning('Timeout expired on try %s', i)
+                        continue
+
+                    LOGGER.debug(
+                        'Received (as hex): %s',
+                        ':'.join(format(ord(c), '02x') for c in recv))
+
+                    try:
+                        reply = msg.verify(recv)
+                    except AssertionError as e:
+                        LOGGER.warning('Invalid response discarded %s',
+                                       e.message)
+                        # Silently discard invalid replies (as RFC states).
+                        continue
+
+                    if reply.code == CODE_ACCESS_ACCEPT:
+                        LOGGER.info('Access accepted')
+                        return True
+
+                    elif reply.code == CODE_ACCESS_CHALLENGE:
+                        LOGGER.info('Access challenged')
+                        # TODO: parse attributes to extract the
+                        # Reply-Message(s), which could be an actual challenge
+                        # messages (to display to the user). Also, pass along
+                        # state which should be echoed back to the server.
+                        raise ChallengeResponse(
+                            reply.attributes.get('Reply-Message', None),
+                            state=reply.attributes.get('State', None))
+
+                    LOGGER.info('Access rejected')
+                    return False
+
+            except socket.error as e:  # SocketError
+                LOGGER.debug('Socket error', exc_info=True)
+                raise SocketError(e)
+
+            LOGGER.error('Request timed out after %s tries', i)
+            raise NoResponse()
+
 
 # Don't break code written for radius.py distributed with the ZRadius
 # Zope product
-Radius = RADIUS
+RADIUS = Radius
+
+
+def main():
+    host = raw_input("Host [default: 'radius']: ")
+    port = raw_input('Port [default: %s]: ' % DEFAULT_PORT)
+
+    host = host if host else 'radius'
+    port = int(port) if port else DEFAULT_PORT
+
+    secret = username = password = None
+
+    while not secret:
+        secret = raw_input('Enter RADIUS Secret: ')
+
+    while not username:
+        username = raw_input('Enter your username: ')
+
+    while not password:
+        password = raw_input('Enter your password: ')
+
+    def _status(outcome):
+        if outcome:
+            print('Authentication Succeeded')
+            sys.exit(0)
+        else:
+            sys.exit('Authentication Failed')
+
+    try:
+        _status(authenticate(secret, username, password, host=host, port=port))
+    except ChallengeResponse as e:
+        pass
+    except Exception as e:
+        traceback.print_exc()
+        sys.exit('Authentication Error')
+
+    print('RADIUS server replied with a challenge.')
+
+    for m in e.messages:
+        print(' - %s' % m)
+
+    response = None
+    while not response:
+        response = raw_input('Enter your challenge response: ')
+
+    a = Attributes()
+    if e.state:
+        a['State'] = e.state
+
+    try:
+        _status(authenticate(secret, username, response, host=host, port=port,
+                attributes=a))
+    except Exception as e:
+        traceback.print_exc()
+        sys.exit('Authentication Error')
+
 
 if __name__ == '__main__':
+    import sys
+    import traceback
 
-    from getpass import getpass
+    LOGGER.addHandler(logging.StreamHandler())
+    LOGGER.setLevel(logging.DEBUG)
 
-    host = raw_input("Host? (default = 'radius')")
-    port = raw_input('Port? (default = 1645) ')
-
-    if not host: host = 'radius'
-
-    if port: port = int(port)
-    else: port = 1645
-    
-    secret = ''
-    while not secret: secret = getpass('RADIUS Secret? ')
-
-    r = RADIUS(secret,host,port)
-
-    uname,passwd = None,None
-
-    while not uname:  uname = raw_input("Username? ")
-    while not passwd: passwd = getpass("Password? ")
-
-    if r.authenticate(uname,passwd):
-        print "Authentication Succeeded"
-    else:
-        print "Authentication Failed"
+    main()
