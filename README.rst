@@ -1,13 +1,13 @@
-.. image:: https://travis-ci.org/btimby/tpq.svg?branch=master
+.. image:: https://travis-ci.org/btimby/py-radius.svg?branch=master
    :alt: Travis CI Status
-   :target: https://travis-ci.org/btimby/tpq
+   :target: https://travis-ci.org/btimby/py-radius
 
-.. image:: https://coveralls.io/repos/github/btimby/tpq/badge.svg?branch=master
-    :target: https://coveralls.io/github/btimby/tpq?branch=master
+.. image:: https://coveralls.io/repos/github/btimby/py-radius/badge.svg?branch=master
+    :target: https://coveralls.io/github/btimby/py-radius?branch=master
     :alt: Code Coverage
 
-.. image:: https://badge.fury.io/py/tpq.svg
-    :target: https://badge.fury.io/py/tpq
+.. image:: https://badge.fury.io/py/py-radius.svg
+    :target: https://badge.fury.io/py/py-radius
 
 RADIUS authentication module for Python 2.7.13
 
