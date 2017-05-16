@@ -8,6 +8,10 @@ TEST_PORT = 1812
 
 
 class AttributesTestCase(unittest.TestCase):
+    """
+    Test attribute multi-dict.
+    """
+
     def test_set_get_item(self):
         a = radius.Attributes()
 
@@ -47,6 +51,10 @@ class AttributesTestCase(unittest.TestCase):
 
 
 class MessageTestCase(unittest.TestCase):
+    """
+    Test message packing and unpacking.
+    """
+
     def test_message(self):
         m = radius.Message(radius.CODE_ACCESS_REQUEST, TEST_SECRET,
                            attributes={})
@@ -54,6 +62,16 @@ class MessageTestCase(unittest.TestCase):
         self.assertGreater(256, m.id)
         self.assertEqual(16, len(m.authenticator))
         self.assertIsInstance(m.attributes, radius.Attributes)
+
+    def test_un_pack(self):
+        m = radius.access_request(TEST_SECRET, 'foo', 'bar')
+        d = m.pack()
+        self.assertEqual(43, len(d))
+
+        u = radius.Message.unpack(d, TEST_SECRET)
+        self.assertEqual(radius.CODE_ACCESS_REQUEST, u.code)
+        self.assertEqual(m.id, u.id)
+        self.assertEqual(m.authenticator, u.authenticator)
 
 
 class RadcryptTestCase(unittest.TestCase):
