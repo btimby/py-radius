@@ -299,6 +299,13 @@ class Attributes(UserDict):
         else:
             return ATTR_NAMES[value], value
 
+    def __contains__(self, key):
+        """
+        Override in operator.
+        """
+        code = self.__getkeys(key)[0]
+        return UserDict.__contains__(self, code)
+
     def __getitem__(self, key):
         """
         Retrieve an item from attributes (by name or id).

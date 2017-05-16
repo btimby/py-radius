@@ -1,6 +1,8 @@
+import sys
 import unittest
 import socket
 import threading
+import logging
 
 try:
     from hashlib import md5
@@ -10,19 +12,27 @@ except ImportError:
 import radius
 
 
+logging.basicConfig(
+    stream=sys.stderr,
+    # Change level to DEBUG here if you need to.
+    level=logging.CRITICAL,
+    format='%(thread)d: %(message)s'
+)
+LOGGER = logging.getLogger(__name__)
+
 TEST_SECRET = 's3cr3t'
 TEST_HOST = 'localhost'
 TEST_PORT = 1812
 
 
-def create_reply(m1):
+def create_reply(m1, code=radius.CODE_ACCESS_REJECT, attributes={}):
     """
     Helper function.
     """
     m1_data = m1.pack()
 
-    m2 = radius.Message(TEST_SECRET, radius.CODE_ACCESS_REJECT, id=m1.id,
-                        authenticator=m1.authenticator)
+    m2 = radius.Message(TEST_SECRET, code, id=m1.id,
+                        authenticator=m1.authenticator, attributes=attributes)
     # Pack the second message with an invalid authenticator.
     m2_data = m2.pack()
     # Then calculate the correct authenticator using the message data.
@@ -150,8 +160,8 @@ class RadiusTestCase(unittest.TestCase):
 
         self.assertEqual('hello?', self.sock.recv(32))
 
-    def test_message(self):
-        """Test sending a message and receiving a reply."""
+    def test_failure(self):
+        """Test sending a message and receiving a reject reply."""
         def _reply_to_client():
             """Thread to act as server."""
             data, addr = self.sock.recvfrom(4096)
@@ -164,6 +174,46 @@ class RadiusTestCase(unittest.TestCase):
 
         r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
         self.assertFalse(r.authenticate('username', 'password'))
+
+    def test_success(self):
+        """Test sending a message and receiving an accept reply."""
+        def _reply_to_client():
+            """Thread to act as server."""
+            data, addr = self.sock.recvfrom(4096)
+            m1 = radius.Message.unpack(TEST_SECRET, data)
+            m2 = create_reply(m1, radius.CODE_ACCESS_ACCEPT)
+            self.sock.sendto(m2.pack(), addr)
+
+        t = threading.Thread(target=_reply_to_client)
+        t.start()
+
+        r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
+        self.assertTrue(r.authenticate('username', 'password'))
+
+    def test_challenge(self):
+        """Test sending a message and receiving an challenge reply."""
+        def _reply_to_client():
+            """Thread to act as server."""
+            data, addr = self.sock.recvfrom(4096)
+            m1 = radius.Message.unpack(TEST_SECRET, data)
+            m2 = create_reply(m1, radius.CODE_ACCESS_CHALLENGE, attributes={
+                'Reply-Message': 'Message one',
+                'State': 'Indiana',
+            })
+            self.sock.sendto(m2.pack(), addr)
+
+        t = threading.Thread(target=_reply_to_client)
+        t.start()
+
+        r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
+        try:
+            r.authenticate('username', 'password')
+        except radius.ChallengeResponse as e:
+            self.assertEqual(1, len(e.messages))
+            self.assertEqual(['Message one'], e.messages)
+            self.assertEqual('Indiana', e.state)
+        else:
+            self.fail('ChallengeResponse not raised')
 
 
 class RadcryptTestCase(unittest.TestCase):
