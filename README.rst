@@ -9,6 +9,9 @@
 .. image:: https://badge.fury.io/py/py-radius.svg
     :target: https://badge.fury.io/py/py-radius
 
+py-radius
+=========
+
 RADIUS authentication module for Python 2.7.13
 
 (c) 1999 Stuart Bishop <zen@shangri-la.dropbear.id.au>
