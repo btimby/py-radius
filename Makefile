@@ -1,5 +1,5 @@
 test:
-	python tests.py
+	coverage run tests.py
 
 lint:
 	flake8 radius.py
@@ -9,3 +9,5 @@ dependencies:
 
 travis: lint test
 
+coveralls:
+	coveralls -v
