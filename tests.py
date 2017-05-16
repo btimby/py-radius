@@ -1,6 +1,7 @@
 import unittest
 import radius
 
+
 TEST_SECRET = 's3cr3t'
 TEST_HOST = 'localhost'
 TEST_PORT = 1812
@@ -68,8 +69,5 @@ class RadcryptTestCase(unittest.TestCase):
         self.assertEqual(c, LARGE_CRYPT)
 
 
-def main():
-    unittest.main()
-
 if __name__ == '__main__':
-    main()
+    unittest.main()

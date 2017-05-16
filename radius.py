@@ -188,7 +188,7 @@ class Radius:
                 else:
                     continue
 
-                if ord(response[1]) <> id:
+                if ord(response[1]) != id:
                     continue
 
                 # Verify the packet is not a cheap forgery or corrupt
@@ -196,7 +196,7 @@ class Radius:
                 m = md5(response[0:4] + authenticator + response[20:] 
                     + self._secret).digest()
 
-                if m <> checkauth:
+                if m != checkauth:
                     continue
 
                 rcode = ord(response[0])
@@ -248,6 +248,6 @@ if __name__ == '__main__':
         passwd = getpass("Password? ")
 
     if Radius(secret, host, port).authenticate(uname, passwd):
-        print "Authentication Succeeded"
+        print("Authentication Succeeded")
     else:
-        print "Authentication Failed"
+        print("Authentication Failed")
