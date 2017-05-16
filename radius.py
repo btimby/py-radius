@@ -60,6 +60,7 @@ except ImportError:
 __version__ = '1.0.4'
 
 LOGGER = logging.getLogger(__name__)
+LOGGER.addHandler(logging.NullHandler())
 
 # Networking constants.
 # -------------------------------
@@ -240,7 +241,7 @@ def join(items):
     return ''.join(items)
 
 
-def authenticate(username, password, secret, **kwargs):
+def authenticate(secret, username, password, **kwargs):
     """
     Authenticate the user against a radius server.
 
@@ -305,11 +306,12 @@ class Attributes(UserDict):
         for k in self.__getkeys(key):
             try:
                 values = UserDict.__getitem__(self, k)
+            except KeyError:
+                continue
+            else:
                 if len(values) == 1:
                     return values[0]
                 return values
-            except KeyError:
-                continue
         raise KeyError(key)
 
     def __setitem__(self, key, value):
@@ -388,7 +390,7 @@ class Message(object):
     Length - two octets, the length of the packet up to the max of 4096.
     """
 
-    def __init__(self, code, secret, id=None, authenticator=None,
+    def __init__(self, secret, code, id=None, authenticator=None,
                  attributes=None):
         self.code = code
         self.secret = secret
@@ -411,27 +413,27 @@ class Message(object):
         return join(data)
 
     @staticmethod
-    def unpack(data, secret):
+    def unpack(secret, data):
         """Unpack the data into it's fields."""
         code, id, l, authenticator = struct.unpack('!BBH16s', data[:20])
         if l != len(data):
             LOGGER.warning('Too much data!')
         attrs = Attributes.unpack(data[20:l])
-        return Message(code, secret, id, authenticator, attrs)
+        return Message(secret, code, id, authenticator, attrs)
 
     def verify(self, data):
         """
         Verify and unpack a response.
 
-        Ensures that a message is a valid response to this message. Then unpack
-        it.
+        Ensures that a message is a valid response to this message, then
+        unpacks it.
         """
         id = ord(data[1])
         assert self.id == id, 'ID mismatch (%s != %s)' % (self.id, id)
         signature = md5(
             data[:4] + self.authenticator + data[20:] + self.secret).digest()
         assert signature == data[4:20], 'Invalid authenticator'
-        return Message.unpack(data, self.secret)
+        return Message.unpack(self.secret, data)
 
 
 def access_request(secret, username, password, **kwargs):
@@ -441,7 +443,7 @@ def access_request(secret, username, password, **kwargs):
     Handles creating a new Message, and populating it with the username and
     password.
     """
-    m = Message(CODE_ACCESS_REQUEST, secret, **kwargs)
+    m = Message(secret, CODE_ACCESS_REQUEST, **kwargs)
     m.attributes['User-Name'] = username
     m.attributes['User-Password'] = radcrypt(secret, m.authenticator, password)
     return m
@@ -576,7 +578,7 @@ def main():
             sys.exit('Authentication Failed')
 
     try:
-        _status(authenticate(username, password, secret, host=host, port=port))
+        _status(authenticate(secret, username, password, host=host, port=port))
     except ChallengeResponse as e:
         pass
     except Exception as e:
@@ -597,7 +599,7 @@ def main():
         a['State'] = e.state
 
     try:
-        _status(authenticate(username, response, secret, host=host, port=port,
+        _status(authenticate(secret, username, response, host=host, port=port,
                 attributes=a))
     except Exception as e:
         traceback.print_exc()

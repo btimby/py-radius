@@ -1,4 +1,12 @@
 import unittest
+import socket
+import threading
+
+try:
+    from hashlib import md5
+except ImportError:
+    from md5 import md5
+
 import radius
 
 
@@ -7,24 +15,48 @@ TEST_HOST = 'localhost'
 TEST_PORT = 1812
 
 
+def create_reply(m1):
+    """
+    Helper function.
+    """
+    m1_data = m1.pack()
+
+    m2 = radius.Message(TEST_SECRET, radius.CODE_ACCESS_REJECT, id=m1.id,
+                        authenticator=m1.authenticator)
+    # Pack the second message with an invalid authenticator.
+    m2_data = m2.pack()
+    # Then calculate the correct authenticator using the message data.
+    # Replace the authenticator with the correct one.
+    m2.authenticator = md5(
+        m2_data[:4] + m1.authenticator + m2_data[20:] + TEST_SECRET
+    ).digest()
+    return m2
+
+
 class AttributesTestCase(unittest.TestCase):
     """
     Test attribute multi-dict.
     """
 
     def test_set_get_item(self):
+        """Test setting and getting items."""
         a = radius.Attributes()
 
         # Cannot use invalid radius codes or names.
         with self.assertRaises(ValueError):
             a[128] = 'bar'
+
         with self.assertRaises(ValueError):
             a['foo'] = 'bar'
+
+        with self.assertRaises(KeyError):
+            a['User-Name']
 
         a['User-Name'] = 'foobar'
         self.assertEqual('foobar', a[radius.ATTR_USER_NAME])
 
     def test_init_update(self):
+        """Test __init__ and update."""
         with self.assertRaises(ValueError):
             a = radius.Attributes({'foo': 'bar'})
 
@@ -39,6 +71,7 @@ class AttributesTestCase(unittest.TestCase):
         self.assertEqual('raboof', a['User-Password'])
 
     def test_un_pack(self):
+        """Test packing and unpacking attributes."""
         a = radius.Attributes()
         a['User-Name'] = 'foobar'
         a['User-Password'] = 'raboof'
@@ -56,6 +89,7 @@ class MessageTestCase(unittest.TestCase):
     """
 
     def test_message(self):
+        """Test message initialization."""
         m = radius.Message(radius.CODE_ACCESS_REQUEST, TEST_SECRET,
                            attributes={})
         self.assertLess(0, m.id)
@@ -64,14 +98,72 @@ class MessageTestCase(unittest.TestCase):
         self.assertIsInstance(m.attributes, radius.Attributes)
 
     def test_un_pack(self):
+        """Test packing and unpacking messages."""
         m = radius.access_request(TEST_SECRET, 'foo', 'bar')
         d = m.pack()
         self.assertEqual(43, len(d))
 
-        u = radius.Message.unpack(d, TEST_SECRET)
+        u = radius.Message.unpack(TEST_SECRET, d)
         self.assertEqual(radius.CODE_ACCESS_REQUEST, u.code)
         self.assertEqual(m.id, u.id)
         self.assertEqual(m.authenticator, u.authenticator)
+
+        # Extra data should not prevent unpacking.
+        radius.Message.unpack(TEST_SECRET, d+ '0')
+
+    def test_verify(self):
+        """Test response verification."""
+        m1 = radius.access_request(TEST_SECRET, 'foo', 'bar')
+        m2 = create_reply(m1)
+
+        # Verify should now succeed.
+        m2 = m1.verify(m2.pack())
+        self.assertIsInstance(m2, radius.Message)
+
+        # Should fail with incrrect id
+        m2.id += 1
+        with self.assertRaises(AssertionError):
+            m1.verify(m2.pack())
+
+        # Should fail with incorrect authenticator.
+        m2.authenticator = ''.join(reversed(m2.authenticator))
+        with self.assertRaises(AssertionError):
+            m1.verify(m2.pack())
+
+
+class RadiusTestCase(unittest.TestCase):
+    """Test the RADIUS client."""
+
+    def setUp(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(('127.0.0.1', 0))
+        self.port = self.sock.getsockname()[1]
+
+    def tearDown(self):
+        self.sock.close()
+
+    def test_connect(self):
+        """Test connecting."""
+        r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
+        with r.connect() as c:
+            c.send('hello?')
+
+        self.assertEqual('hello?', self.sock.recv(32))
+
+    def test_message(self):
+        """Test sending a message and receiving a reply."""
+        def _reply_to_client():
+            """Thread to act as server."""
+            data, addr = self.sock.recvfrom(4096)
+            m1 = radius.Message.unpack(TEST_SECRET, data)
+            m2 = create_reply(m1)
+            self.sock.sendto(m2.pack(), addr)
+
+        t = threading.Thread(target=_reply_to_client)
+        t.start()
+
+        r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
+        self.assertFalse(r.authenticate('username', 'password'))
 
 
 class RadcryptTestCase(unittest.TestCase):
