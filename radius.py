@@ -36,41 +36,66 @@ Homepage at http://github.com/btimby/py-radius/
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import socket
+
 from select import select
 from struct import pack,unpack
 from random import randint
+
 try:
     from hashlib import md5
 except ImportError:
     from md5 import new as md5
-import socket
+
 
 __version__ = '1.0.3'
 
 # Constants
-ACCESS_REQUEST	= 1
-ACCESS_ACCEPT	= 2
-ACCESS_REJECT	= 3
+ACCESS_REQUEST = 1
+ACCESS_ACCEPT = 2
+ACCESS_REJECT = 3
+ACCESS_CHALLENGE = 11
 
 DEFAULT_RETRIES = 3
 DEFAULT_TIMEOUT = 5
 
-class Error(Exception): pass
-class NoResponse(Error): pass
-class SocketError(NoResponse): pass
 
-def authenticate(username,password,secret,host='radius',port=1645):
-    '''Return 1 for a successful authentication. Other values indicate
-       failure (should only ever be 0 anyway).
+class Error(Exception):
+    pass
 
-       Can raise either NoResponse or SocketError'''
 
-    r = RADIUS(secret,host,port)
-    return r.authenticate(username,password)
+class NoResponse(Error):
+    pass
 
-class RADIUS:
 
-    def __init__(self,secret,host='radius',port=1645):
+class ChallengeResponse(Error):
+    pass
+
+
+class SocketError(NoResponse):
+    pass
+
+
+def authenticate(username, password, secret, host='radius', port=1645):
+    """
+    Authenticate the user against a radius server.
+
+    Return True if the user successfully logged in and False if not.
+    
+    If the server replies with a challenge, a `ChallengeResponse` exception is
+    raised with the challenge.
+
+    Can raise either NoResponse or SocketError
+    """
+    return Radius(secret, host, port).authenticate(username, password)
+
+
+class Radius:
+    """
+    Radius client implementation.
+    """
+
+    def __init__(self, secret, host='radius', port=1645):
         self._secret = secret
         self._host   = host
         self._port   = port
@@ -84,34 +109,35 @@ class RADIUS:
 
     def opensocket(self):
         if self._socket == None:
-            self._socket = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-            self._socket.connect((self._host,self._port))
+            self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self._socket.connect((self._host, self._port))
 
     def closesocket(self):
         if self._socket is not None:
             try:
                 self._socket.close()
-            except socket.error,x:
+            except socket.error as x:
                 raise SocketError(x)
             self._socket = None
 
     def generateAuthenticator(self):
         '''A 16 byte random string'''
-        v = range(0,17)
+        v = range(0, 17)
         v[0] = '16B'
-        for i in range(1,17):
-            v[i] = randint(1,255)
+        for i in range(1, 17):
+            v[i] = randint(1, 255)
 
-        return apply(pack,v)
+        return apply(pack, v)
 
-    def radcrypt(self,authenticator,text):
+    def radcrypt(self, authenticator, text):
         '''Encrypt a password with the secret'''
         # First, pad the password to multiple of 16 octets.
         text += chr(0) * (16 - (len(text) % 16))
+
         if len(text) > 128:
-            raise Exception('Password exceeds maximun of 128 bytes')
-        result = ''
-        last = authenticator
+            raise ValueError('Password exceeds maximun of 128 bytes')
+
+        result, last = '', authenticator
         while text:
             # md5sum the shared secret with the authenticator,
             # after the first iteration, the authenticator is the previous
@@ -124,14 +150,18 @@ class RADIUS:
             # the last 16 octets of our result (the xor we just completed). And
             # remove the first 16 octets from the password.
             last, text = result[-16:], text[16:]
+
         return result
 
     def authenticate(self,uname,passwd):
-        '''Attempt t authenticate with the given username and password.
-           Returns 0 on failure
-           Returns 1 on success
-           Raises a NoResponse (or its subclass SocketError) exception if 
-                no responses or no valid responses are received'''
+        """
+        Attempt to authenticate with the given username and password.
+
+           Returns False on failure
+           Returns True on success
+           Raises a NoResponse (or its subclass SocketError) exception if no
+               responses or no valid responses are received
+        """
 
         try:
             self.opensocket()
@@ -139,21 +169,21 @@ class RADIUS:
 
             authenticator = self.generateAuthenticator()
 
-            encpass = self.radcrypt(authenticator,passwd)
+            encpass = self.radcrypt(authenticator, passwd)
 
             msg = pack('!B B H 16s B B %ds B B %ds' \
-                    % (len(uname),len(encpass)),\
-                1,id,
-                len(uname)+len(encpass) + 24, # Length of entire message
+                    % (len(uname), len(encpass)),\
+                1, id,
+                len(uname) + len(encpass) + 24, # Length of entire message
                 authenticator,
-                1,len(uname)+2,uname,
-                2,len(encpass)+2,encpass)
+                1, len(uname) + 2, uname,
+                2, len(encpass) + 2, encpass)
 
             for i in range(0,self.retries):
                 self._socket.send(msg)
 
-                t = select( [self._socket,],[],[],self.timeout)
-                if len(t[0]) > 0:
+                r, w, x = select([self._socket,], [], [], self.timeout)
+                if len(r) > 0:
                     response = self._socket.recv(4096)
                 else:
                     continue
@@ -169,45 +199,55 @@ class RADIUS:
                 if m <> checkauth:
                     continue
 
-                if ord(response[0]) == ACCESS_ACCEPT:
-                    return 1	
-                else:
-                    return 0
+                rcode = ord(response[0])
+                if rcode == ACCESS_ACCEPT:
+                    return True
 
-        except socket.error,x: # SocketError
-            try: self.closesocket()
-            except: pass
+                elif rcode == ACCESS_CHALLENGE:
+                    # TODO: parse attributes to extract the Reply-Message,
+                    # which could be an actual challenge message (to display to
+                    # the user).
+                    raise ChallengeResponse()
+
+                return False
+
+        except socket.error as x: # SocketError
+            try:
+                self.closesocket()
+            except:
+                pass
             raise SocketError(x)
 
-        raise NoResponse
+        raise NoResponse()
+
 
 # Don't break code written for radius.py distributed with the ZRadius
 # Zope product
-Radius = RADIUS
+RADIUS = Radius
+
 
 if __name__ == '__main__':
 
     from getpass import getpass
 
-    host = raw_input("Host? (default = 'radius')")
-    port = raw_input('Port? (default = 1645) ')
+    host = raw_input("Host [default: 'radius']:")
+    port = raw_input('Port [default: 1645]:')
 
-    if not host: host = 'radius'
+    host = host if host else 'radius'
+    port = int(port) if port else 1645
 
-    if port: port = int(port)
-    else: port = 1645
-    
-    secret = ''
-    while not secret: secret = getpass('RADIUS Secret? ')
+    secret, uname, passwd = None, None, None
 
-    r = RADIUS(secret,host,port)
+    while not secret:
+        secret = getpass('RADIUS Secret? ')
 
-    uname,passwd = None,None
+    while not uname:
+        uname = raw_input("Username? ")
 
-    while not uname:  uname = raw_input("Username? ")
-    while not passwd: passwd = getpass("Password? ")
+    while not passwd:
+        passwd = getpass("Password? ")
 
-    if r.authenticate(uname,passwd):
+    if Radius(secret, host, port).authenticate(uname, passwd):
         print "Authentication Succeeded"
     else:
         print "Authentication Failed"
