@@ -30,7 +30,6 @@ def create_reply(m1, code=radius.CODE_ACCESS_REJECT, attributes={}):
     Helper function.
     """
     m1_data = m1.pack()
-
     m2 = radius.Message(TEST_SECRET, code, id=m1.id,
                         authenticator=m1.authenticator, attributes=attributes)
     # Pack the second message with an invalid authenticator.
@@ -258,8 +257,8 @@ class RadcryptTestCase(unittest.TestCase):
       The String will contain c(1)+c(2)+...+c(i) where + denotes
       concatenation.
     """
-    def setUp(self):
-        self.authenticator = '\xa0\xdb7\xe2\x1f1\x18-op\xff>&A\xb0g'
+
+    authenticator = '\xa0\xdb7\xe2\x1f1\x18-op\xff>&A\xb0g'
 
     def test_radcrypt_small(self):
         'Test a password shorter than 16 octets.'

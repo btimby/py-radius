@@ -560,8 +560,8 @@ RADIUS = Radius
 
 
 def main():
-    host = raw_input("Host [default: 'radius']: ")  # NOQA
-    port = raw_input('Port [default: %s]: ' % DEFAULT_PORT)  # NOQA
+    host = raw_input("Host [default: 'radius']: ")
+    port = raw_input('Port [default: %s]: ' % DEFAULT_PORT)
 
     host = host if host else 'radius'
     port = int(port) if port else DEFAULT_PORT
@@ -572,10 +572,10 @@ def main():
         secret = raw_input('Enter RADIUS Secret: ')
 
     while not username:
-        username = raw_input("Enter your username: ")  # noqa
+        username = raw_input('Enter your username: ')
 
     while not password:
-        password = raw_input("Enter your password: ")
+        password = raw_input('Enter your password: ')
 
     def _status(outcome):
         if outcome:
@@ -599,7 +599,7 @@ def main():
 
     response = None
     while not response:
-        response = raw_input('Enter your challenge response:')
+        response = raw_input('Enter your challenge response: ')
 
     a = Attributes()
     if e.state:
