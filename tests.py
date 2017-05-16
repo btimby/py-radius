@@ -7,6 +7,55 @@ TEST_HOST = 'localhost'
 TEST_PORT = 1812
 
 
+class AttributesTestCase(unittest.TestCase):
+    def test_set_get_item(self):
+        a = radius.Attributes()
+
+        # Cannot use invalid radius codes or names.
+        with self.assertRaises(ValueError):
+            a[128] = 'bar'
+        with self.assertRaises(ValueError):
+            a['foo'] = 'bar'
+
+        a['User-Name'] = 'foobar'
+        self.assertEqual('foobar', a[radius.ATTR_USER_NAME])
+
+    def test_init_update(self):
+        with self.assertRaises(ValueError):
+            a = radius.Attributes({'foo': 'bar'})
+
+        a = radius.Attributes({'User-Name': 'foobar'})
+        self.assertEqual('foobar', a['User-Name'])
+
+        with self.assertRaises(ValueError):
+            a.update({'foo': 'bar'})
+
+        a.update({'User-Password': 'raboof'})
+        self.assertEqual('foobar', a['User-Name'])
+        self.assertEqual('raboof', a['User-Password'])
+
+    def test_un_pack(self):
+        a = radius.Attributes()
+        a['User-Name'] = 'foobar'
+        a['User-Password'] = 'raboof'
+        data = a.pack()
+        self.assertEqual(16, len(data))
+        b = radius.Attributes.unpack(data)
+        self.assertEqual(2, len(b))
+        self.assertEqual('foobar', b['User-Name'])
+        self.assertEqual('raboof', b['User-Password'])
+
+
+class MessageTestCase(unittest.TestCase):
+    def test_message(self):
+        m = radius.Message(radius.CODE_ACCESS_REQUEST, TEST_SECRET,
+                           attributes={})
+        self.assertLess(0, m.id)
+        self.assertGreater(256, m.id)
+        self.assertEqual(16, len(m.authenticator))
+        self.assertIsInstance(m.attributes, radius.Attributes)
+
+
 class RadcryptTestCase(unittest.TestCase):
     """
       On transmission, the password is hidden.  The password is first
@@ -56,16 +105,14 @@ class RadcryptTestCase(unittest.TestCase):
         'Test a password shorter than 16 octets.'
         SMALL_PASS = 'I3Zl@"42Xs%^[nk'
         SMALL_CRYPT = '\xdc\xf7V\x82\xeb\xa8Zm\x1b\x92\xb3\xa3\x06\x02\xbc\x16'
-        r = radius.RADIUS(TEST_SECRET, TEST_HOST, TEST_PORT)
-        c = r.radcrypt(self.authenticator, SMALL_PASS)
+        c = radius.radcrypt(TEST_SECRET, self.authenticator, SMALL_PASS)
         self.assertEqual(c, SMALL_CRYPT)
 
     def test_radcrypt_large(self):
         'Test a password longer than 16 octets.'
         LARGE_PASS = '`0T8/Ub\tojdP;\rc:L}#_hOF'
         LARGE_CRYPT = '\xf5\xf4X\xd6\x84\xdf\x0cV,\x8b\xf2\xadfa\xb4,S\xef\x0f\x908\xfcH\x9a\xe9r\xcc\xd0\x07\x84\xdc\x98'
-        r = radius.RADIUS(TEST_SECRET, TEST_HOST, TEST_PORT)
-        c = r.radcrypt(self.authenticator, LARGE_PASS)
+        c = radius.radcrypt(TEST_SECRET, self.authenticator, LARGE_PASS)
         self.assertEqual(c, LARGE_CRYPT)
 
 
