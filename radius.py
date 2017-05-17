@@ -245,6 +245,12 @@ if PY3:
     def chr(s):
         return bytes([s])
 
+def bytes_safe(s, e='utf-8'):
+    try:
+        return s.encode(e)
+    except AttributeError:
+        return s
+
 
 def join(items):
     """
@@ -480,10 +486,7 @@ class Radius(object):
 
     def __init__(self, secret, host='radius', port=DEFAULT_PORT,
                  retries=DEFAULT_RETRIES, timeout=DEFAULT_TIMEOUT):
-        try:
-            self._secret = secret.encode('utf-8')
-        except AttributeError:
-            self._secret = secret
+        self._secret = bytes_safe(secret)
         self.retries = retries
         self.timeout = timeout
         self._host = host
@@ -517,8 +520,8 @@ class Radius(object):
            Raises a NoResponse (or its subclass SocketError) exception if no
                responses or no valid responses are received
         """
-        username = str(username).encode('utf-8')
-        password = str(password).encode('utf-8')
+        username = bytes_safe(username)
+        password = bytes_safe(password)
         with self.connect() as c:
             try:
                 msg = access_request(self.secret, username, password, **kwargs)
