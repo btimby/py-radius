@@ -10,7 +10,7 @@ versrel = version + '-' + release
 download_url = 'https://github.com/downloads/btimby/' + name + \
                            '/' + name + '-' + versrel + '.tar.gz'
 
-with file('LICENSE', 'r') as l:
+with open('LICENSE', 'r') as l:
     license = l.read()
 
 setup(
