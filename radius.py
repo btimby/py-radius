@@ -242,8 +242,8 @@ if PY3:
     def ord(s):
         return s
 
-    def chr(s, e):
-        return s
+    def chr(s):
+        return bytes([s])
 
 
 def join(items):
