@@ -245,6 +245,7 @@ if PY3:
     def chr(s):
         return bytes([s])
 
+
 def bytes_safe(s, e='utf-8'):
     try:
         return s.encode(e)
