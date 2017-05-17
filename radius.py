@@ -97,7 +97,7 @@ CODES = {
     CODE_STATUS_CLIENT: 'Status-Client',
 }
 
-CODE_NAMES = {v: k for k, v in CODES.items()}
+CODE_NAMES = {v.lower(): k for k, v in CODES.items()}
 
 # Attributes that can be part of the RADIUS payload.
 ATTR_USER_NAME = 1
@@ -190,7 +190,7 @@ ATTRS = {
 }
 
 # Map from name to id.
-ATTR_NAMES = {v: k for k, v in ATTRS.items()}
+ATTR_NAMES = {v.lower(): k for k, v in ATTRS.items()}
 # -------------------------------
 
 
@@ -314,7 +314,8 @@ class Attributes(UserDict):
         if isinstance(value, int):
             return value, ATTRS[value]
         else:
-            return ATTR_NAMES[value], value
+            id = ATTR_NAMES[value.lower()]
+            return id, ATTRS[id]
 
     def __contains__(self, key):
         """

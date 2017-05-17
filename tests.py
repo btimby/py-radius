@@ -61,8 +61,10 @@ class AttributesTestCase(unittest.TestCase):
         with self.assertRaises(KeyError):
             a['User-Name']
 
-        a['User-Name'] = b'foobar'
+        a['User-name'] = b'foobar'
         self.assertEqual([b'foobar'], a[radius.ATTR_USER_NAME])
+        self.assertEqual([b'foobar'], a['user-name'])
+        self.assertEqual([b'foobar'], a['user-Name'])
 
     def test_init_update(self):
         """Test __init__ and update."""
@@ -169,6 +171,7 @@ class RadiusTestCase(unittest.TestCase):
             self.sock.sendto(m2.pack(), addr)
 
         t = threading.Thread(target=_reply_to_client)
+        t.daemon = True
         t.start()
 
         r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
@@ -184,6 +187,7 @@ class RadiusTestCase(unittest.TestCase):
             self.sock.sendto(m2.pack(), addr)
 
         t = threading.Thread(target=_reply_to_client)
+        t.daemon = True
         t.start()
 
         r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
@@ -202,6 +206,7 @@ class RadiusTestCase(unittest.TestCase):
             self.sock.sendto(m2.pack(), addr)
 
         t = threading.Thread(target=_reply_to_client)
+        t.daemon = True
         t.start()
 
         r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
