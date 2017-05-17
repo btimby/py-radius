@@ -165,8 +165,8 @@ class RadiusTestCase(unittest.TestCase):
         """Test sending a message and receiving a reject reply."""
         def _reply_to_client():
             """Thread to act as server."""
-            recv, addr = self.sock.recvfrom(4096)
-            m1 = radius.Message.unpack(TEST_SECRET, recv)
+            data, addr = self.sock.recvfrom(radius.PACKET_MAX)
+            m1 = radius.Message.unpack(TEST_SECRET, data)
             m2 = create_reply(m1)
             self.sock.sendto(m2.pack(), addr)
 
