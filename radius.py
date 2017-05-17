@@ -241,7 +241,7 @@ def join(items):
     return ''.join(items)
 
 
-def authenticate(secret, username, password, **kwargs):
+def authenticate(secret, username, password, host=None, port=None, **kwargs):
     """
     Authenticate the user against a radius server.
 
@@ -252,7 +252,15 @@ def authenticate(secret, username, password, **kwargs):
 
     Can raise either NoResponse or SocketError
     """
-    return Radius(secret, **kwargs).authenticate(username, password)
+    # Pass host/port to the Radius instance. But ONLY if they are defined,
+    # otherwise we allow Radius to use the defaults for the kwargs.
+    rkwargs = {}
+    if host:
+        rkwargs['host'] = host
+    if port:
+        rkwargs['port'] = port
+    # Additional kwargs (like attributes) are sent to Radius.authenticate().
+    return Radius(secret, **rkwargs).authenticate(username, password, **kwargs)
 
 
 def radcrypt(secret, authenticator, password):
