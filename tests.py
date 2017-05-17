@@ -20,7 +20,7 @@ logging.basicConfig(
 )
 LOGGER = logging.getLogger(__name__)
 
-TEST_SECRET = 's3cr3t'
+TEST_SECRET = b's3cr3t'
 TEST_HOST = 'localhost'
 TEST_PORT = 1812
 
@@ -53,43 +53,45 @@ class AttributesTestCase(unittest.TestCase):
 
         # Cannot use invalid radius codes or names.
         with self.assertRaises(ValueError):
-            a[128] = 'bar'
+            a[128] = b'bar'
 
         with self.assertRaises(ValueError):
-            a['foo'] = 'bar'
+            a['foo'] = b'bar'
 
         with self.assertRaises(KeyError):
             a['User-Name']
 
-        a['User-Name'] = 'foobar'
-        self.assertEqual('foobar', a[radius.ATTR_USER_NAME])
+        a['User-name'] = b'foobar'
+        self.assertEqual([b'foobar'], a[radius.ATTR_USER_NAME])
+        self.assertEqual([b'foobar'], a['user-name'])
+        self.assertEqual([b'foobar'], a['user-Name'])
 
     def test_init_update(self):
         """Test __init__ and update."""
         with self.assertRaises(ValueError):
-            a = radius.Attributes({'foo': 'bar'})
+            a = radius.Attributes({'foo': b'bar'})
 
-        a = radius.Attributes({'User-Name': 'foobar'})
-        self.assertEqual('foobar', a['User-Name'])
+        a = radius.Attributes({'User-Name': b'foobar'})
+        self.assertEqual([b'foobar'], a['User-Name'])
 
         with self.assertRaises(ValueError):
-            a.update({'foo': 'bar'})
+            a.update({'foo': b'bar'})
 
-        a.update({'User-Password': 'raboof'})
-        self.assertEqual('foobar', a['User-Name'])
-        self.assertEqual('raboof', a['User-Password'])
+        a.update({'User-Password': b'raboof'})
+        self.assertEqual([b'foobar'], a['User-Name'])
+        self.assertEqual([b'raboof'], a['User-Password'])
 
     def test_un_pack(self):
         """Test packing and unpacking attributes."""
         a = radius.Attributes()
-        a['User-Name'] = 'foobar'
-        a['User-Password'] = 'raboof'
+        a['User-Name'] = b'foobar'
+        a['User-Password'] = b'raboof'
         data = a.pack()
         self.assertEqual(16, len(data))
         b = radius.Attributes.unpack(data)
         self.assertEqual(2, len(b))
-        self.assertEqual('foobar', b['User-Name'])
-        self.assertEqual('raboof', b['User-Password'])
+        self.assertEqual([b'foobar'], b['User-Name'])
+        self.assertEqual([b'raboof'], b['User-Password'])
 
 
 class MessageTestCase(unittest.TestCase):
@@ -108,7 +110,7 @@ class MessageTestCase(unittest.TestCase):
 
     def test_un_pack(self):
         """Test packing and unpacking messages."""
-        m = radius.access_request(TEST_SECRET, 'foo', 'bar')
+        m = radius.access_request(TEST_SECRET, b'foo', b'bar')
         d = m.pack()
         self.assertEqual(43, len(d))
 
@@ -118,11 +120,11 @@ class MessageTestCase(unittest.TestCase):
         self.assertEqual(m.authenticator, u.authenticator)
 
         # Extra data should not prevent unpacking.
-        radius.Message.unpack(TEST_SECRET, d+ '0')
+        radius.Message.unpack(TEST_SECRET, d + b'0')
 
     def test_verify(self):
         """Test response verification."""
-        m1 = radius.access_request(TEST_SECRET, 'foo', 'bar')
+        m1 = radius.access_request(TEST_SECRET, b'foo', b'bar')
         m2 = create_reply(m1)
 
         # Verify should now succeed.
@@ -135,7 +137,7 @@ class MessageTestCase(unittest.TestCase):
             m1.verify(m2.pack())
 
         # Should fail with incorrect authenticator.
-        m2.authenticator = ''.join(reversed(m2.authenticator))
+        m2.authenticator = b'0' * 16
         with self.assertRaises(AssertionError):
             m1.verify(m2.pack())
 
@@ -155,20 +157,21 @@ class RadiusTestCase(unittest.TestCase):
         """Test connecting."""
         r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
         with r.connect() as c:
-            c.send('hello?')
+            c.send(b'hello?')
 
-        self.assertEqual('hello?', self.sock.recv(32))
+        self.assertEqual(b'hello?', self.sock.recv(32))
 
     def test_failure(self):
         """Test sending a message and receiving a reject reply."""
         def _reply_to_client():
             """Thread to act as server."""
-            data, addr = self.sock.recvfrom(4096)
-            m1 = radius.Message.unpack(TEST_SECRET, data)
+            recv, addr = self.sock.recvfrom(4096)
+            m1 = radius.Message.unpack(TEST_SECRET, recv)
             m2 = create_reply(m1)
             self.sock.sendto(m2.pack(), addr)
 
         t = threading.Thread(target=_reply_to_client)
+        t.daemon = True
         t.start()
 
         r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
@@ -184,6 +187,7 @@ class RadiusTestCase(unittest.TestCase):
             self.sock.sendto(m2.pack(), addr)
 
         t = threading.Thread(target=_reply_to_client)
+        t.daemon = True
         t.start()
 
         r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
@@ -196,12 +200,13 @@ class RadiusTestCase(unittest.TestCase):
             data, addr = self.sock.recvfrom(radius.PACKET_MAX)
             m1 = radius.Message.unpack(TEST_SECRET, data)
             m2 = create_reply(m1, radius.CODE_ACCESS_CHALLENGE, attributes={
-                'Reply-Message': 'Message one',
-                'State': 'Indiana',
+                'Reply-Message': b'Message one',
+                'State': b'Indiana',
             })
             self.sock.sendto(m2.pack(), addr)
 
         t = threading.Thread(target=_reply_to_client)
+        t.daemon = True
         t.start()
 
         r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
@@ -209,8 +214,8 @@ class RadiusTestCase(unittest.TestCase):
             r.authenticate('username', 'password')
         except radius.ChallengeResponse as e:
             self.assertEqual(1, len(e.messages))
-            self.assertEqual(['Message one'], e.messages)
-            self.assertEqual('Indiana', e.state)
+            self.assertEqual([b'Message one'], e.messages)
+            self.assertEqual([b'Indiana'], e.state)
         else:
             self.fail('ChallengeResponse not raised')
 
@@ -258,19 +263,19 @@ class RadcryptTestCase(unittest.TestCase):
       concatenation.
     """
 
-    authenticator = '\xa0\xdb7\xe2\x1f1\x18-op\xff>&A\xb0g'
+    authenticator = b'\xa0\xdb7\xe2\x1f1\x18-op\xff>&A\xb0g'
 
     def test_radcrypt_small(self):
         'Test a password shorter than 16 octets.'
-        SMALL_PASS = 'I3Zl@"42Xs%^[nk'
-        SMALL_CRYPT = '\xdc\xf7V\x82\xeb\xa8Zm\x1b\x92\xb3\xa3\x06\x02\xbc\x16'
+        SMALL_PASS = b'I3Zl@"42Xs%^[nk'
+        SMALL_CRYPT = b'\xdc\xf7V\x82\xeb\xa8Zm\x1b\x92\xb3\xa3\x06\x02\xbc\x16'
         c = radius.radcrypt(TEST_SECRET, self.authenticator, SMALL_PASS)
         self.assertEqual(c, SMALL_CRYPT)
 
     def test_radcrypt_large(self):
         'Test a password longer than 16 octets.'
-        LARGE_PASS = '`0T8/Ub\tojdP;\rc:L}#_hOF'
-        LARGE_CRYPT = '\xf5\xf4X\xd6\x84\xdf\x0cV,\x8b\xf2\xadfa\xb4,S\xef\x0f\x908\xfcH\x9a\xe9r\xcc\xd0\x07\x84\xdc\x98'
+        LARGE_PASS = b'`0T8/Ub\tojdP;\rc:L}#_hOF'
+        LARGE_CRYPT = b'\xf5\xf4X\xd6\x84\xdf\x0cV,\x8b\xf2\xadfa\xb4,S\xef\x0f\x908\xfcH\x9a\xe9r\xcc\xd0\x07\x84\xdc\x98'
         c = radius.radcrypt(TEST_SECRET, self.authenticator, LARGE_PASS)
         self.assertEqual(c, LARGE_CRYPT)
 

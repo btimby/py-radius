@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 '''
 Basic RADIUS authentication. Minimum necessary to be able to authenticate a
-user with or without challenge/response, yet remain RFC2138 compliant (I hope).
+user with or without challenge/response, yet remain RFC2865 compliant (I hope).
 
 Homepage at http://github.com/btimby/py-radius/
 '''
@@ -56,8 +56,10 @@ try:
 except ImportError:
     from md5 import new as md5
 
+from six import PY3
 
-__version__ = '1.0.4'
+
+__version__ = '2.0'
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.addHandler(logging.NullHandler())
@@ -95,7 +97,7 @@ CODES = {
     CODE_STATUS_CLIENT: 'Status-Client',
 }
 
-CODE_NAMES = {v: k for k, v in CODES.items()}
+CODE_NAMES = {v.lower(): k for k, v in CODES.items()}
 
 # Attributes that can be part of the RADIUS payload.
 ATTR_USER_NAME = 1
@@ -188,7 +190,7 @@ ATTRS = {
 }
 
 # Map from name to id.
-ATTR_NAMES = {v: k for k, v in ATTRS.items()}
+ATTR_NAMES = {v.lower(): k for k, v in ATTRS.items()}
 # -------------------------------
 
 
@@ -234,11 +236,28 @@ class SocketError(NoResponse):
     pass
 
 
+if PY3:
+    # These functions are used to act upon strings in Python2, but bytes in
+    # Python3. Their functions are not necessary in PY3, so we NOOP them.
+    def ord(s):
+        return s
+
+    def chr(s):
+        return bytes([s])
+
+
+def bytes_safe(s, e='utf-8'):
+    try:
+        return s.encode(e)
+    except AttributeError:
+        return s
+
+
 def join(items):
     """
     Shortcut to join collection of strings.
     """
-    return ''.join(items)
+    return b''.join(items)
 
 
 def authenticate(secret, username, password, host=None, port=None, **kwargs):
@@ -266,12 +285,12 @@ def authenticate(secret, username, password, host=None, port=None, **kwargs):
 def radcrypt(secret, authenticator, password):
     """Encrypt a password with the secret and authenticator."""
     # First, pad the password to multiple of 16 octets.
-    password += chr(0) * (16 - (len(password) % 16))
+    password += b'\0' * (16 - (len(password) % 16))
 
     if len(password) > 128:
         raise ValueError('Password exceeds maximun of 128 bytes')
 
-    result, last = '', authenticator
+    result, last = b'', authenticator
     while password:
         # md5sum the shared secret with the authenticator,
         # after the first iteration, the authenticator is the previous
@@ -305,7 +324,8 @@ class Attributes(UserDict):
         if isinstance(value, int):
             return value, ATTRS[value]
         else:
-            return ATTR_NAMES[value], value
+            id = ATTR_NAMES[value.lower()]
+            return id, ATTRS[id]
 
     def __contains__(self, key):
         """
@@ -320,13 +340,9 @@ class Attributes(UserDict):
         """
         for k in self.__getkeys(key):
             try:
-                values = UserDict.__getitem__(self, k)
+                return UserDict.__getitem__(self, k)
             except KeyError:
                 continue
-            else:
-                if len(values) == 1:
-                    return values[0]
-                return values
         raise KeyError(key)
 
     def __setitem__(self, key, value):
@@ -471,7 +487,7 @@ class Radius(object):
 
     def __init__(self, secret, host='radius', port=DEFAULT_PORT,
                  retries=DEFAULT_RETRIES, timeout=DEFAULT_TIMEOUT):
-        self._secret = secret
+        self._secret = bytes_safe(secret)
         self.retries = retries
         self.timeout = timeout
         self._host = host
@@ -505,6 +521,8 @@ class Radius(object):
            Raises a NoResponse (or its subclass SocketError) exception if no
                responses or no valid responses are received
         """
+        username = bytes_safe(username)
+        password = bytes_safe(password)
         with self.connect() as c:
             try:
                 msg = access_request(self.secret, username, password, **kwargs)
@@ -532,8 +550,7 @@ class Radius(object):
                     try:
                         reply = msg.verify(recv)
                     except AssertionError as e:
-                        LOGGER.warning('Invalid response discarded %s',
-                                       e.message)
+                        LOGGER.warning('Invalid response discarded %s', e)
                         # Silently discard invalid replies (as RFC states).
                         continue
 
@@ -543,13 +560,9 @@ class Radius(object):
 
                     elif reply.code == CODE_ACCESS_CHALLENGE:
                         LOGGER.info('Access challenged')
-                        # TODO: parse attributes to extract the
-                        # Reply-Message(s), which could be an actual challenge
-                        # messages (to display to the user). Also, pass along
-                        # state which should be echoed back to the server.
-                        raise ChallengeResponse(
-                            reply.attributes.get('Reply-Message', None),
-                            state=reply.attributes.get('State', None))
+                        messages = reply.attributes.get('Reply-Message', None)
+                        state = reply.attributes.get('State', None)
+                        raise ChallengeResponse(messages, state)
 
                     LOGGER.info('Access rejected')
                     return False
