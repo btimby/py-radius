@@ -12,7 +12,7 @@
 py-radius
 =========
 
-RADIUS authentication module for Python 2.7.13
+RADIUS authentication module for Python 2.7.13+
 
 \(c) 1999 Stuart Bishop <zen@shangri-la.dropbear.id.au>
 
@@ -70,19 +70,20 @@ complex.
 
     try:
         print('success' if r.authenticate(username, password) else 'failure')
+        sys.exit(0)
     except radius.ChallengeResponse as e:
-        # The ChallengeResponse exception has `messages` and `state` attributes
-        # `messages` can be displayed to the user to prompt them for their
-        # challenge response. `state` must be echoed back as a RADIUS attribute.
+        pass
 
-        # By default send no attributes.
-        attrs = radius.Attributes()
-        if e.state:
-            # If server provided state, echo it.
-            attrs['State'] = e.state
+    # The ChallengeResponse exception has `messages` and `state` attributes
+    # `messages` can be displayed to the user to prompt them for their
+    # challenge response. `state` must be echoed back as a RADIUS attribute.
 
-        # Finally authenticate again using the challenge response from the user
-        # in place of the password.
-        r.authenticate(username, response, attributes=attrs)
+    # Send state as an attribute _IF_ provided.
+    attrs = {'State': e.state} if e.state else {}
+
+    # Finally authenticate again using the challenge response from the user
+    # in place of the password.
+    print('success' if r.authenticate(username, response, attributes=attrs)
+                    else 'failure')
 
 This module has extensive logging, enable it using the Python logging framework.
