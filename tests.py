@@ -110,7 +110,7 @@ class MessageTestCase(unittest.TestCase):
 
     def test_un_pack(self):
         """Test packing and unpacking messages."""
-        m = radius.access_request(TEST_SECRET, b'foo', b'bar')
+        m = radius.Radius(TEST_SECRET).access_request_message(b'foo', b'bar')
         d = m.pack()
         self.assertEqual(43, len(d))
 
@@ -124,7 +124,7 @@ class MessageTestCase(unittest.TestCase):
 
     def test_verify(self):
         """Test response verification."""
-        m1 = radius.access_request(TEST_SECRET, b'foo', b'bar')
+        m1 = radius.Radius(TEST_SECRET).access_request_message(b'foo', b'bar')
         m2 = create_reply(m1)
 
         # Verify should now succeed.

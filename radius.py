@@ -467,19 +467,6 @@ class Message(object):
         return Message.unpack(self.secret, data)
 
 
-def access_request(secret, username, password, **kwargs):
-    """
-    Helper to create access request message.
-
-    Handles creating a new Message, and populating it with the username and
-    password.
-    """
-    m = Message(secret, CODE_ACCESS_REQUEST, **kwargs)
-    m.attributes['User-Name'] = username
-    m.attributes['User-Password'] = radcrypt(secret, m.authenticator, password)
-    return m
-
-
 class Radius(object):
     """
     Radius client implementation.
@@ -512,22 +499,11 @@ class Radius(object):
             LOGGER.debug('Connected to %s:%s', self.host, self.port)
             yield c
 
-    def authenticate(self, username, password, **kwargs):
-        """
-        Attempt to authenticate with the given username and password.
+    def send_message(self, message):
+        send = message.pack()
 
-           Returns False on failure
-           Returns True on success
-           Raises a NoResponse (or its subclass SocketError) exception if no
-               responses or no valid responses are received
-        """
-        username = bytes_safe(username)
-        password = bytes_safe(password)
-        with self.connect() as c:
-            try:
-                msg = access_request(self.secret, username, password, **kwargs)
-                send = msg.pack()
-
+        try:
+            with self.connect() as c:
                 for i in range(self.retries):
                     LOGGER.debug(
                         'Sending (as hex): %s',
@@ -548,31 +524,54 @@ class Radius(object):
                         ':'.join(format(ord(c), '02x') for c in recv))
 
                     try:
-                        reply = msg.verify(recv)
+                        return message.verify(recv)
                     except AssertionError as e:
                         LOGGER.warning('Invalid response discarded %s', e)
                         # Silently discard invalid replies (as RFC states).
                         continue
 
-                    if reply.code == CODE_ACCESS_ACCEPT:
-                        LOGGER.info('Access accepted')
-                        return True
+        except socket.error as e:  # SocketError
+            LOGGER.debug('Socket error', exc_info=True)
+            raise SocketError(e)
 
-                    elif reply.code == CODE_ACCESS_CHALLENGE:
-                        LOGGER.info('Access challenged')
-                        messages = reply.attributes.get('Reply-Message', None)
-                        state = reply.attributes.get('State', None)
-                        raise ChallengeResponse(messages, state)
+        LOGGER.error('Request timed out after %s tries', i)
+        raise NoResponse()
 
-                    LOGGER.info('Access rejected')
-                    return False
+    def access_request_message(self, username, password, **kwargs):
+        username = bytes_safe(username)
+        password = bytes_safe(password)
 
-            except socket.error as e:  # SocketError
-                LOGGER.debug('Socket error', exc_info=True)
-                raise SocketError(e)
+        message = Message(self.secret, CODE_ACCESS_REQUEST, **kwargs)
+        message.attributes['User-Name'] = username
+        message.attributes['User-Password'] = \
+            radcrypt(self.secret, message.authenticator, password)
 
-            LOGGER.error('Request timed out after %s tries', i)
-            raise NoResponse()
+        return message
+
+    def authenticate(self, username, password, **kwargs):
+        """
+        Attempt to authenticate with the given username and password.
+
+           Returns False on failure
+           Returns True on success
+           Raises a NoResponse (or its subclass SocketError) exception if no
+               responses or no valid responses are received
+        """
+        reply = self.send_message(
+            self.access_request_message(username, password, **kwargs))
+
+        if reply.code == CODE_ACCESS_ACCEPT:
+            LOGGER.info('Access accepted')
+            return True
+
+        elif reply.code == CODE_ACCESS_CHALLENGE:
+            LOGGER.info('Access challenged')
+            messages = reply.attributes.get('Reply-Message', None)
+            state = reply.attributes.get('State', None)
+            raise ChallengeResponse(messages, state)
+
+        LOGGER.info('Access rejected')
+        return False
 
 
 # Don't break code written for radius.py distributed with the ZRadius
