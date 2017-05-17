@@ -178,7 +178,7 @@ class RadiusTestCase(unittest.TestCase):
         """Test sending a message and receiving an accept reply."""
         def _reply_to_client():
             """Thread to act as server."""
-            data, addr = self.sock.recvfrom(4096)
+            data, addr = self.sock.recvfrom(radius.PACKET_MAX)
             m1 = radius.Message.unpack(TEST_SECRET, data)
             m2 = create_reply(m1, radius.CODE_ACCESS_ACCEPT)
             self.sock.sendto(m2.pack(), addr)
@@ -193,7 +193,7 @@ class RadiusTestCase(unittest.TestCase):
         """Test sending a message and receiving an challenge reply."""
         def _reply_to_client():
             """Thread to act as server."""
-            data, addr = self.sock.recvfrom(4096)
+            data, addr = self.sock.recvfrom(radius.PACKET_MAX)
             m1 = radius.Message.unpack(TEST_SECRET, data)
             m2 = create_reply(m1, radius.CODE_ACCESS_CHALLENGE, attributes={
                 'Reply-Message': 'Message one',

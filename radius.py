@@ -519,7 +519,7 @@ class Radius(object):
 
                     r, w, x = select([c], [], [], self.timeout)
                     if c in r:
-                        recv = c.recv(4096)
+                        recv = c.recv(PACKET_MAX)
                     else:
                         # No data available on our socket. Try again.
                         LOGGER.warning('Timeout expired on try %s', i)
