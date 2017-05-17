@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 '''
 Basic RADIUS authentication. Minimum necessary to be able to authenticate a
-user with or without challenge/response, yet remain RFC2138 compliant (I hope).
+user with or without challenge/response, yet remain RFC2865 compliant (I hope).
 
 Homepage at http://github.com/btimby/py-radius/
 '''
