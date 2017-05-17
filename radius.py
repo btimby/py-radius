@@ -239,8 +239,11 @@ class SocketError(NoResponse):
 if PY3:
     # These functions are used to act upon strings in Python2, but bytes in
     # Python3. Their functions are not necessary in PY3, so we NOOP them.
-    ord = lambda s: s
-    chr = lambda s: bytes([s])
+    def ord(s):
+        return s
+
+    def chr(s, e):
+        return s
 
 
 def join(items):
@@ -554,7 +557,7 @@ class Radius(object):
                     elif reply.code == CODE_ACCESS_CHALLENGE:
                         LOGGER.info('Access challenged')
                         messages = reply.attributes.get('Reply-Message', None)
-                        state = state=reply.attributes.get('State', None)
+                        state = reply.attributes.get('State', None)
                         raise ChallengeResponse(messages, state)
 
                     LOGGER.info('Access rejected')
