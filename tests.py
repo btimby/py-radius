@@ -110,7 +110,7 @@ class MessageTestCase(unittest.TestCase):
 
     def test_un_pack(self):
         """Test packing and unpacking messages."""
-        m = radius.Radius(TEST_SECRET).access_request_message(b'foo', b'bar')
+        m = radius.Radius(TEST_SECRET).access_request_message(b'foo', u'bar')
         d = m.pack()
         self.assertEqual(43, len(d))
 
@@ -215,7 +215,7 @@ class RadiusTestCase(unittest.TestCase):
         except radius.ChallengeResponse as e:
             self.assertEqual(1, len(e.messages))
             self.assertEqual([b'Message one'], e.messages)
-            self.assertEqual([b'Indiana'], e.state)
+            self.assertEqual(b'Indiana', e.state)
         else:
             self.fail('ChallengeResponse not raised')
 

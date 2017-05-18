@@ -249,7 +249,7 @@ if PY3:
 def bytes_safe(s, e='utf-8'):
     try:
         return s.encode(e)
-    except AttributeError:
+    except (AttributeError, UnicodeDecodeError):
         return s
 
 
@@ -379,7 +379,7 @@ class Attributes(UserDict):
         for key, values in self.items():
             for value in values:
                 data.append(struct.pack('BB%ds' % len(value), key,
-                                        len(value) + 2, safe_bytes(value)))
+                                        len(value) + 2, bytes_safe(value)))
         return join(data)
 
     @staticmethod
