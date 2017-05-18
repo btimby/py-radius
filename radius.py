@@ -379,7 +379,7 @@ class Attributes(UserDict):
         for key, values in self.items():
             for value in values:
                 data.append(struct.pack('BB%ds' % len(value), key,
-                                        len(value) + 2, value))
+                                        len(value) + 2, safe_bytes(value)))
         return join(data)
 
     @staticmethod
