@@ -567,7 +567,7 @@ class Radius(object):
         elif reply.code == CODE_ACCESS_CHALLENGE:
             LOGGER.info('Access challenged')
             messages = reply.attributes.get('Reply-Message', None)
-            state = reply.attributes.get('State', None)
+            state = reply.attributes.get('State', [None])[0]
             raise ChallengeResponse(messages, state)
 
         LOGGER.info('Access rejected')
