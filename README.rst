@@ -52,7 +52,7 @@ Here is an example of using the library.
 
     import radius
 
-    radius.authenticate(username, password, secret, host='radius', port=1812)
+    radius.authenticate(secret, username, password, host='radius', port=1812)
 
     # - OR -
 
