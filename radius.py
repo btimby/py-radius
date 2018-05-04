@@ -395,9 +395,9 @@ class Attributes(UserDict):
         """
         pos, attrs = 0, {}
         while pos < len(data):
-            code, l = struct.unpack('BB', data[pos:pos + 2])
-            attrs[code] = data[pos + 2:pos + l]
-            pos += l
+            code, length = struct.unpack('BB', data[pos:pos + 2])
+            attrs[code] = data[pos + 2:pos + length]
+            pos += length
         return Attributes(attrs)
 
 
@@ -452,10 +452,10 @@ class Message(object):
     @staticmethod
     def unpack(secret, data):
         """Unpack the data into it's fields."""
-        code, id, l, authenticator = struct.unpack('!BBH16s', data[:20])
-        if l != len(data):
+        code, id, length, authenticator = struct.unpack('!BBH16s', data[:20])
+        if length != len(data):
             LOGGER.warning('Too much data!')
-        attrs = Attributes.unpack(data[20:l])
+        attrs = Attributes.unpack(data[20:length])
         return Message(secret, code, id, authenticator, attrs)
 
     def verify(self, data):
