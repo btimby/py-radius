@@ -51,10 +51,10 @@ class AttributesTestCase(unittest.TestCase):
         """Test setting and getting items."""
         a = radius.Attributes()
 
-        # Cannot use invalid radius codes or names.
-        with self.assertRaises(ValueError):
-            a[128] = b'bar'
+        # Can use unknown radius codes.
+        a[128] = b'bar'
 
+        # Cannot use invalid radius names.
         with self.assertRaises(ValueError):
             a['foo'] = b'bar'
 
