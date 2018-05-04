@@ -144,6 +144,7 @@ ATTR_CHAP_CHALLENGE = 60
 ATTR_NAS_PORT_TYPE = 61
 ATTR_PORT_LIMIT = 62
 ATTR_LOGIN_LAT_PORT = 63
+ATTR_PROMPT = 76
 
 ATTRS = {
     ATTR_USER_NAME: 'User-Name',
@@ -187,6 +188,7 @@ ATTRS = {
     ATTR_NAS_PORT_TYPE: 'NAS-Port-Type',
     ATTR_PORT_LIMIT: 'Port-Limit',
     ATTR_LOGIN_LAT_PORT: 'Login-LAT-Port',
+    ATTR_PROMPT: 'Prompt',
 }
 
 # Map from name to id.
@@ -218,7 +220,7 @@ class ChallengeResponse(Error):
 
     There can be 0+ messages. State is either defined or not.
     """
-    def __init__(self, msg=None, state=None):
+    def __init__(self, msg=None, state=None, prompt=0):
         if msg is None:
             self.messages = []
         elif isinstance(msg, list):
@@ -226,6 +228,7 @@ class ChallengeResponse(Error):
         else:
             self.messages = [msg]
         self.state = state
+        self.prompt = prompt
 
 
 class SocketError(NoResponse):
@@ -568,7 +571,10 @@ class Radius(object):
             LOGGER.info('Access challenged')
             messages = reply.attributes.get('Reply-Message', None)
             state = reply.attributes.get('State', [None])[0]
-            raise ChallengeResponse(messages, state)
+            default_prompt = ['\x00\x00\x00\x00']
+            prompt = struct.unpack(
+                '!i', reply.attributes.get('Prompt', default_prompt)[0])[0]
+            raise ChallengeResponse(messages, state, prompt)
 
         LOGGER.info('Access rejected')
         return False
