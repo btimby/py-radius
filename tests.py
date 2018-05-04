@@ -3,6 +3,7 @@ import unittest
 import socket
 import threading
 import logging
+import time
 
 try:
     from hashlib import md5
@@ -153,6 +154,12 @@ class RadiusTestCase(unittest.TestCase):
     def tearDown(self):
         self.sock.close()
 
+    def startServer(self, target):
+        t = threading.Thread(target=target)
+        t.daemon = True
+        t.start()
+        time.sleep(0.1)
+
     def test_connect(self):
         """Test connecting."""
         r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
@@ -170,9 +177,7 @@ class RadiusTestCase(unittest.TestCase):
             m2 = create_reply(m1)
             self.sock.sendto(m2.pack(), addr)
 
-        t = threading.Thread(target=_reply_to_client)
-        t.daemon = True
-        t.start()
+        self.startServer(_reply_to_client)
 
         r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
         self.assertFalse(r.authenticate('username', 'password'))
@@ -186,9 +191,7 @@ class RadiusTestCase(unittest.TestCase):
             m2 = create_reply(m1, radius.CODE_ACCESS_ACCEPT)
             self.sock.sendto(m2.pack(), addr)
 
-        t = threading.Thread(target=_reply_to_client)
-        t.daemon = True
-        t.start()
+        self.startServer(_reply_to_client)
 
         r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
         self.assertTrue(r.authenticate('username', 'password'))
@@ -205,9 +208,7 @@ class RadiusTestCase(unittest.TestCase):
             })
             self.sock.sendto(m2.pack(), addr)
 
-        t = threading.Thread(target=_reply_to_client)
-        t.daemon = True
-        t.start()
+        self.startServer(_reply_to_client)
 
         r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
         try:
