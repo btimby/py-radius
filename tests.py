@@ -4,7 +4,7 @@ import socket
 import threading
 import logging
 import time
-
+import struct
 try:
     from hashlib import md5
 except ImportError:
@@ -205,6 +205,7 @@ class RadiusTestCase(unittest.TestCase):
             m2 = create_reply(m1, radius.CODE_ACCESS_CHALLENGE, attributes={
                 'Reply-Message': b'Message one',
                 'State': b'Indiana',
+                'Prompt': struct.pack('!i', 128),
             })
             self.sock.sendto(m2.pack(), addr)
 
@@ -217,6 +218,7 @@ class RadiusTestCase(unittest.TestCase):
             self.assertEqual(1, len(e.messages))
             self.assertEqual([b'Message one'], e.messages)
             self.assertEqual(b'Indiana', e.state)
+            self.assertEqual(128, e.prompt)
         else:
             self.fail('ChallengeResponse not raised')
 
