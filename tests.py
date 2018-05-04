@@ -215,10 +215,30 @@ class RadiusTestCase(unittest.TestCase):
         try:
             r.authenticate('username', 'password')
         except radius.ChallengeResponse as e:
-            self.assertEqual(1, len(e.messages))
             self.assertEqual([b'Message one'], e.messages)
             self.assertEqual(b'Indiana', e.state)
             self.assertEqual(128, e.prompt)
+        else:
+            self.fail('ChallengeResponse not raised')
+
+    def test_challenge_empty(self):
+        """Test sending a message and receiving an challenge reply."""
+        def _reply_to_client():
+            """Thread to act as server."""
+            data, addr = self.sock.recvfrom(radius.PACKET_MAX)
+            m1 = radius.Message.unpack(TEST_SECRET, data)
+            m2 = create_reply(m1, radius.CODE_ACCESS_CHALLENGE)
+            self.sock.sendto(m2.pack(), addr)
+
+        self.startServer(_reply_to_client)
+
+        r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
+        try:
+            r.authenticate('username', 'password')
+        except radius.ChallengeResponse as e:
+            self.assertEqual([], e.messages)
+            self.assertIsNone(e.state)
+            self.assertIsNone(e.prompt)
         else:
             self.fail('ChallengeResponse not raised')
 
