@@ -144,6 +144,8 @@ ATTR_CHAP_CHALLENGE = 60
 ATTR_NAS_PORT_TYPE = 61
 ATTR_PORT_LIMIT = 62
 ATTR_LOGIN_LAT_PORT = 63
+# For RSA Authentication Manager
+ATTR_PROMPT = 76
 
 ATTRS = {
     ATTR_USER_NAME: 'User-Name',
@@ -187,6 +189,7 @@ ATTRS = {
     ATTR_NAS_PORT_TYPE: 'NAS-Port-Type',
     ATTR_PORT_LIMIT: 'Port-Limit',
     ATTR_LOGIN_LAT_PORT: 'Login-LAT-Port',
+    ATTR_PROMPT: 'Prompt',
 }
 
 # Map from name to id.
@@ -216,9 +219,9 @@ class ChallengeResponse(Error):
 
     Provides the message(s) if any, as well as the state (if provided).
 
-    There can be 0+ messages. State is either defined or not.
+    There can be 0+ messages. State and prompt are either defined or None.
     """
-    def __init__(self, msg=None, state=None):
+    def __init__(self, msg=None, state=None, prompt=None):
         if msg is None:
             self.messages = []
         elif isinstance(msg, list):
@@ -226,6 +229,7 @@ class ChallengeResponse(Error):
         else:
             self.messages = [msg]
         self.state = state
+        self.prompt = prompt
 
 
 class SocketError(NoResponse):
@@ -572,9 +576,23 @@ class Radius(object):
 
         elif reply.code == CODE_ACCESS_CHALLENGE:
             LOGGER.info('Access challenged')
-            messages = reply.attributes.get('Reply-Message', None)
-            state = reply.attributes.get('State', [None])[0]
-            raise ChallengeResponse(messages, state)
+            rkwargs = {}
+            try:
+                rkwargs['msg'] = reply.attributes['Reply-Message']
+            except KeyError:
+                pass
+            try:
+                rkwargs['state'] = reply.attributes['State'][0]
+            except (KeyError, IndexError):
+                pass
+            try:
+                prompt = reply.attributes['Prompt'][0]
+            except KeyError:
+                pass
+            else:
+                rkwargs['prompt'] = struct.unpack('!i', prompt)[0]
+
+            raise ChallengeResponse(**rkwargs)
 
         LOGGER.info('Access rejected')
         return False
