@@ -66,6 +66,7 @@ class AttributesTestCase(unittest.TestCase):
         self.assertEqual([b'foobar'], a[radius.ATTR_USER_NAME])
         self.assertEqual([b'foobar'], a['user-name'])
         self.assertEqual([b'foobar'], a['user-Name'])
+        self.assertEqual([('User-Name', ['foobar'])], list(a.nameditems()))
 
     def test_init_update(self):
         """Test __init__ and update."""
@@ -81,6 +82,9 @@ class AttributesTestCase(unittest.TestCase):
         a.update({'User-Password': b'raboof'})
         self.assertEqual([b'foobar'], a['User-Name'])
         self.assertEqual([b'raboof'], a['User-Password'])
+        self.assertEqual(
+            [('User-Name', ['foobar']), ('User-Password', ['raboof'])],
+            list(a.nameditems()))
 
     def test_un_pack(self):
         """Test packing and unpacking attributes."""
@@ -93,6 +97,9 @@ class AttributesTestCase(unittest.TestCase):
         self.assertEqual(2, len(b))
         self.assertEqual([b'foobar'], b['User-Name'])
         self.assertEqual([b'raboof'], b['User-Password'])
+        self.assertEqual(
+            [('User-Name', ['foobar']), ('User-Password', ['raboof'])],
+            list(a.nameditems()))
 
 
 class MessageTestCase(unittest.TestCase):
