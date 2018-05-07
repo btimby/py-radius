@@ -66,7 +66,8 @@ class AttributesTestCase(unittest.TestCase):
         self.assertEqual([b'foobar'], a[radius.ATTR_USER_NAME])
         self.assertEqual([b'foobar'], a['user-name'])
         self.assertEqual([b'foobar'], a['user-Name'])
-        self.assertEqual([('User-Name', ['foobar'])], list(a.nameditems()))
+        self.assertEqual(
+            [(None, ['bar']), ('User-Name', ['foobar'])], list(a.nameditems()))
 
     def test_init_update(self):
         """Test __init__ and update."""
