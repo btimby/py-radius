@@ -52,10 +52,10 @@ class AttributesTestCase(unittest.TestCase):
         """Test setting and getting items."""
         a = radius.Attributes()
 
-        # Cannot use invalid radius codes or names.
-        with self.assertRaises(ValueError):
-            a[128] = b'bar'
+        # Can use unknown radius codes.
+        a[128] = b'bar'
 
+        # Cannot use invalid radius names.
         with self.assertRaises(ValueError):
             a['foo'] = b'bar'
 
@@ -66,7 +66,8 @@ class AttributesTestCase(unittest.TestCase):
         self.assertEqual([b'foobar'], a[radius.ATTR_USER_NAME])
         self.assertEqual([b'foobar'], a['user-name'])
         self.assertEqual([b'foobar'], a['user-Name'])
-        self.assertEqual([('User-Name', ['foobar'])], list(a.nameditems()))
+        self.assertEqual(
+            [(None, ['bar']), ('User-Name', ['foobar'])], list(a.nameditems()))
 
     def test_init_update(self):
         """Test __init__ and update."""

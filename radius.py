@@ -326,7 +326,8 @@ class Attributes(UserDict):
     def __getkeys(self, value):
         """Return tuple of code, name for given code or name."""
         if isinstance(value, int):
-            return value, ATTRS[value]
+            return value, ATTRS.get(value, None)
+
         else:
             id = ATTR_NAMES[value.lower()]
             return id, ATTRS[id]
@@ -355,8 +356,13 @@ class Attributes(UserDict):
         """
         try:
             code, name = self.__getkeys(key)
+
         except KeyError:
-            raise ValueError('Invalid radius attribute: %s' % key)
+            raise ValueError('Unknown radius attribute: %s' % key)
+
+        if name is None:
+            LOGGER.warning('Unknown radius attribute code %s' % code)
+
         values = self.get(code, [])
         values.append(value)
         UserDict.__setitem__(self, code, values)
