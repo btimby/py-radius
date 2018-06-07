@@ -155,12 +155,16 @@ class RadiusTestCase(unittest.TestCase):
     """Test the RADIUS client."""
 
     def setUp(self):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind(('127.0.0.1', 0))
-        self.port = self.sock.getsockname()[1]
+        self.sockv4 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sockv4.bind(('127.0.0.1', 0))
+        self.portv4 = self.sockv4.getsockname()[1]
+        self.sockv6 = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        self.sockv6.bind(('::1', 0))
+        self.portv6 = self.sockv6.getsockname()[1]
 
     def tearDown(self):
-        self.sock.close()
+        self.sockv4.close()
+        self.sockv6.close()
 
     def startServer(self, target):
         t = threading.Thread(target=target)
@@ -168,58 +172,82 @@ class RadiusTestCase(unittest.TestCase):
         t.start()
         time.sleep(0.1)
 
-    def test_connect(self):
-        """Test connecting."""
-        r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
+    def connect(self, sock, port, af):
+        """Generic test connecting."""
+        r = radius.Radius(TEST_SECRET, host='localhost', port=port, af=af)
         with r.connect() as c:
             c.send(b'hello?')
 
-        self.assertEqual(b'hello?', self.sock.recv(32))
+        self.assertEqual(b'hello?', sock.recv(32))
 
-    def test_failure(self):
-        """Test sending a message and receiving a reject reply."""
+    def test_connectv4(self):
+        """Test connecting over IPv4."""
+        self.connect(self.sockv4, self.portv4, socket.AF_INET)
+
+    def test_connectv6(self):
+        """Test connecting over IPv6."""
+        self.connect(self.sockv6, self.portv6, socket.AF_INET6)
+
+    def failure(self, sock, port, af):
+        """Generic test sending a message and receiving a reject reply."""
         def _reply_to_client():
             """Thread to act as server."""
-            data, addr = self.sock.recvfrom(radius.PACKET_MAX)
+            data, addr = sock.recvfrom(radius.PACKET_MAX)
             m1 = radius.Message.unpack(TEST_SECRET, data)
             m2 = create_reply(m1)
-            self.sock.sendto(m2.pack(), addr)
+            sock.sendto(m2.pack(), addr)
 
         self.startServer(_reply_to_client)
 
-        r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
+        r = radius.Radius(TEST_SECRET, host='localhost', port=port, af=af)
         self.assertFalse(r.authenticate('username', 'password'))
 
-    def test_success(self):
-        """Test sending a message and receiving an accept reply."""
+    def test_failurev4(self):
+        """Test sending a message and receiving a reject reply over IPv4."""
+        self.failure(self.sockv4, self.portv4, socket.AF_INET)
+
+    def test_failurev6(self):
+        """Test sending a message and receiving a reject reply over IPv6."""
+        self.failure(self.sockv6, self.portv6, socket.AF_INET6)
+
+    def success(self, sock, port, af):
+        """Generic test sending a message and receiving an accept reply."""
         def _reply_to_client():
             """Thread to act as server."""
-            data, addr = self.sock.recvfrom(radius.PACKET_MAX)
+            data, addr = sock.recvfrom(radius.PACKET_MAX)
             m1 = radius.Message.unpack(TEST_SECRET, data)
             m2 = create_reply(m1, radius.CODE_ACCESS_ACCEPT)
-            self.sock.sendto(m2.pack(), addr)
+            sock.sendto(m2.pack(), addr)
 
         self.startServer(_reply_to_client)
 
-        r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
+        r = radius.Radius(TEST_SECRET, host='localhost', port=port, af=af)
         self.assertTrue(r.authenticate('username', 'password'))
 
-    def test_challenge(self):
-        """Test sending a message and receiving an challenge reply."""
+    def test_successv4(self):
+        """Test sending a message and receiving an accept reply over IPv4."""
+        self.success(self.sockv4, self.portv4, socket.AF_INET)
+
+    def test_successv6(self):
+        """Test sending a message and receiving an accept reply over IPv6."""
+        self.success(self.sockv6, self.portv6, socket.AF_INET6)
+
+    def challenge(self, sock, port, af):
+        """Generic test sending a message and receiving an challenge reply."""
         def _reply_to_client():
             """Thread to act as server."""
-            data, addr = self.sock.recvfrom(radius.PACKET_MAX)
+            data, addr = sock.recvfrom(radius.PACKET_MAX)
             m1 = radius.Message.unpack(TEST_SECRET, data)
             m2 = create_reply(m1, radius.CODE_ACCESS_CHALLENGE, attributes={
                 'Reply-Message': b'Message one',
                 'State': b'Indiana',
                 'Prompt': struct.pack('!i', 128),
             })
-            self.sock.sendto(m2.pack(), addr)
+            sock.sendto(m2.pack(), addr)
 
         self.startServer(_reply_to_client)
 
-        r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
+        r = radius.Radius(TEST_SECRET, host='localhost', port=port, af=af)
         try:
             r.authenticate('username', 'password')
         except radius.ChallengeResponse as e:
@@ -229,18 +257,26 @@ class RadiusTestCase(unittest.TestCase):
         else:
             self.fail('ChallengeResponse not raised')
 
-    def test_challenge_empty(self):
-        """Test sending a message and receiving an challenge reply."""
+    def test_challengev4(self):
+        """Test sending a message and receiving an challenge reply over IPv4."""
+        self.challenge(self.sockv4, self.portv4, socket.AF_INET)
+
+    def test_challengev6(self):
+        """Test sending a message and receiving an challenge reply over IPv6."""
+        self.challenge(self.sockv6, self.portv6, socket.AF_INET6)
+
+    def challenge_empty(self, sock, port, af):
+        """Generic test sending a message and receiving an challenge reply."""
         def _reply_to_client():
             """Thread to act as server."""
-            data, addr = self.sock.recvfrom(radius.PACKET_MAX)
+            data, addr = sock.recvfrom(radius.PACKET_MAX)
             m1 = radius.Message.unpack(TEST_SECRET, data)
             m2 = create_reply(m1, radius.CODE_ACCESS_CHALLENGE)
-            self.sock.sendto(m2.pack(), addr)
+            sock.sendto(m2.pack(), addr)
 
         self.startServer(_reply_to_client)
 
-        r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
+        r = radius.Radius(TEST_SECRET, host='localhost', port=port, af=af)
         try:
             r.authenticate('username', 'password')
         except radius.ChallengeResponse as e:
@@ -249,6 +285,14 @@ class RadiusTestCase(unittest.TestCase):
             self.assertIsNone(e.prompt)
         else:
             self.fail('ChallengeResponse not raised')
+
+    def test_challenge_emptyv4(self):
+        """Test sending a message and receiving an challenge reply over IPv4."""
+        self.challenge_empty(self.sockv4, self.portv4, socket.AF_INET)
+
+    def test_challenge_emptyv6(self):
+        """Test sending a message and receiving an challenge reply over IPv4."""
+        self.challenge_empty(self.sockv6, self.portv6, socket.AF_INET6)
 
 
 class RadcryptTestCase(unittest.TestCase):
