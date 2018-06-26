@@ -197,6 +197,10 @@ ATTR_NAMES = {v.lower(): k for k, v in ATTRS.items()}
 # -------------------------------
 
 
+# Valid protocols
+UDP = "udp"
+TCP = "tcp"
+
 class Error(Exception):
     """
     Base Error class.
@@ -477,18 +481,24 @@ class Message(object):
         return Message.unpack(self.secret, data)
 
 
+class RadiusException(Exception):
+    pass
+
+
 class Radius(object):
     """
     Radius client implementation.
     """
 
     def __init__(self, secret, host='radius', port=DEFAULT_PORT,
-                 retries=DEFAULT_RETRIES, timeout=DEFAULT_TIMEOUT):
+                 retries=DEFAULT_RETRIES, timeout=DEFAULT_TIMEOUT,
+                 proto=UDP):
         self._secret = bytes_safe(secret)
         self.retries = retries
         self.timeout = timeout
         self._host = host
         self._port = port
+        self._proto = proto
 
     @property
     def host(self):
@@ -504,7 +514,21 @@ class Radius(object):
 
     @contextmanager
     def connect(self):
+        if self._proto == UDP:
+            return self._connect_udp()
+        elif self._proto == TCP:
+            return self._connect_tcp()
+        else:
+            raise RadiusException("Invalid protocol specified: %s" % self._proto)
+
+    def _connect_udp(self):
         with closing(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as c:
+            c.connect((self.host, self.port))
+            LOGGER.debug('Connected to %s:%s', self.host, self.port)
+            yield c
+
+    def _connect_tcp(self):
+        with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as c:
             c.connect((self.host, self.port))
             LOGGER.debug('Connected to %s:%s', self.host, self.port)
             yield c
