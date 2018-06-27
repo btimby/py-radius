@@ -166,6 +166,10 @@ class RadiusTestCase(unittest.TestCase):
         self.tcp_sock.listen(1)
         self.tcp_received_data = None
 
+    def tearDown(self):
+        self.sock.close()
+        self.tcp_sock.close()
+
     @staticmethod
     def assertEventually(func, fail_condition=False, timeout=3, interval=0.1,
                          msg=None, *args, **kwargs):
@@ -185,10 +189,6 @@ class RadiusTestCase(unittest.TestCase):
             current_time = time.time()
 
         raise AssertionError("timed out - %s", msg)
-
-    def tearDown(self):
-        self.sock.close()
-        self.tcp_sock.close()
 
     def startServer(self, target):
         t = threading.Thread(target=target)
