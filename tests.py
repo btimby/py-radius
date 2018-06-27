@@ -159,8 +159,36 @@ class RadiusTestCase(unittest.TestCase):
         self.sock.bind(('127.0.0.1', 0))
         self.port = self.sock.getsockname()[1]
 
+        # Setup a test tcp server
+        self.tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.tcp_sock.bind(('127.0.0.1', 0))
+        self.tcp_port = self.tcp_sock.getsockname()[1]
+        self.tcp_sock.listen(1)
+        self.tcp_received_data = None
+
+    @staticmethod
+    def assertEventually(func, fail_condition=False, timeout=3, interval=0.1,
+                         msg=None, *args, **kwargs):
+        start_time = time.time()
+        stop_time = start_time + timeout
+
+        current_time = start_time
+        while (current_time < stop_time):
+            try:
+                assert func(*args, **kwargs) != fail_condition
+            except AssertionError:
+                pass
+            else:
+                return True
+
+            time.sleep(interval)
+            current_time = time.time()
+
+        raise AssertionError("timed out - %s", msg)
+
     def tearDown(self):
         self.sock.close()
+        self.tcp_sock.close()
 
     def startServer(self, target):
         t = threading.Thread(target=target)
@@ -175,6 +203,21 @@ class RadiusTestCase(unittest.TestCase):
             c.send(b'hello?')
 
         self.assertEqual(b'hello?', self.sock.recv(32))
+
+    def test_connect_tcp(self):
+        """Test connecting via tcp."""
+        def _reply_to_client():
+            conn, addr = self.tcp_sock.accept()
+            self.tcp_received_data = conn.recv(32)
+            conn.send(b'bye')
+
+        self.startServer(_reply_to_client)
+
+        r = radius.Radius(TEST_SECRET, host='localhost', port=self.tcp_port, proto=radius.TCP)
+        with r.connect() as c:
+            c.send(b'hello?')
+
+        self.assertEventually(lambda: b'hello?' == self.tcp_received_data)
 
     def test_failure(self):
         """Test sending a message and receiving a reject reply."""
@@ -202,6 +245,22 @@ class RadiusTestCase(unittest.TestCase):
         self.startServer(_reply_to_client)
 
         r = radius.Radius(TEST_SECRET, host='localhost', port=self.port)
+        self.assertTrue(r.authenticate('username', 'password'))
+
+    def test_success_over_tcp(self):
+        """Test sending a message and receiving an accept reply via tcp."""
+        def _reply_to_client():
+            """Thread to act as server."""
+            conn, addr = self.tcp_sock.accept()
+            data = conn.recv(radius.PACKET_MAX)
+            m1 = radius.Message.unpack(TEST_SECRET, data)
+            m2 = create_reply(m1, radius.CODE_ACCESS_ACCEPT)
+            conn.send(m2.pack())
+            conn.close()
+
+        self.startServer(_reply_to_client)
+
+        r = radius.Radius(TEST_SECRET, host='localhost', port=self.tcp_port, proto=radius.TCP)
         self.assertTrue(r.authenticate('username', 'password'))
 
     def test_challenge(self):
