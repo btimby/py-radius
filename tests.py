@@ -188,7 +188,7 @@ class RadiusTestCase(unittest.TestCase):
             time.sleep(interval)
             current_time = time.time()
 
-        raise AssertionError("timed out - %s", msg)
+        raise AssertionError("Timed out - %s" % msg)
 
     def startServer(self, target):
         t = threading.Thread(target=target)
