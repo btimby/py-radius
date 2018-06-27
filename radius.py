@@ -520,7 +520,8 @@ class Radius(object):
         elif self._proto == TCP:
             return self._connect_tcp()
         else:
-            raise RadiusException("Invalid protocol specified: %s" % self._proto)
+            raise RadiusException("Invalid protocol specified: %s"
+                                  % self._proto)
 
     def _connect_udp(self):
         with closing(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as c:
