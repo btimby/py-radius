@@ -219,6 +219,11 @@ class RadiusTestCase(unittest.TestCase):
 
         self.assertEventually(lambda: b'hello?' == self.tcp_received_data)
 
+    def test_invalid_proto(self):
+        """Test that exception is raised if specifying an invalid protocol"""
+        r = radius.Radius(TEST_SECRET, host='localhost', port=self.tcp_port, proto="invalid_proto")
+        self.assertRaises(radius.RadiusException, r.connect)     
+
     def test_failure(self):
         """Test sending a message and receiving a reject reply."""
         def _reply_to_client():
