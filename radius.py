@@ -38,6 +38,7 @@ Homepage at http://github.com/btimby/py-radius/
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
+import sys
 import socket
 import logging
 import struct
@@ -55,8 +56,6 @@ try:
     from hashlib import md5
 except ImportError:
     from md5 import new as md5
-
-from six import PY3
 
 
 __version__ = '2.0.2'
@@ -240,6 +239,7 @@ class SocketError(NoResponse):
     pass
 
 
+PY3 = sys.version_info > (3, 0, 0)
 if PY3:
     # These functions are used to act upon strings in Python2, but bytes in
     # Python3. Their functions are not necessary in PY3, so we NOOP them.
@@ -658,7 +658,6 @@ def main():
 
 
 if __name__ == '__main__':
-    import sys
     import traceback
 
     LOGGER.addHandler(logging.StreamHandler())
