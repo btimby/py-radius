@@ -67,7 +67,7 @@ class AttributesTestCase(unittest.TestCase):
         self.assertEqual([b'foobar'], a['user-name'])
         self.assertEqual([b'foobar'], a['user-Name'])
         self.assertEqual(
-            [(None, ['bar']), ('User-Name', ['foobar'])], list(a.nameditems()))
+            [(None, [b'bar']), ('User-Name', [b'foobar'])], list(a.nameditems()))
 
     def test_init_update(self):
         """Test __init__ and update."""
@@ -84,7 +84,7 @@ class AttributesTestCase(unittest.TestCase):
         self.assertEqual([b'foobar'], a['User-Name'])
         self.assertEqual([b'raboof'], a['User-Password'])
         self.assertEqual(
-            [('User-Name', ['foobar']), ('User-Password', ['raboof'])],
+            [('User-Name', [b'foobar']), ('User-Password', [b'raboof'])],
             list(a.nameditems()))
 
     def test_un_pack(self):
@@ -99,7 +99,7 @@ class AttributesTestCase(unittest.TestCase):
         self.assertEqual([b'foobar'], b['User-Name'])
         self.assertEqual([b'raboof'], b['User-Password'])
         self.assertEqual(
-            [('User-Name', ['foobar']), ('User-Password', ['raboof'])],
+            [('User-Name', [b'foobar']), ('User-Password', [b'raboof'])],
             list(a.nameditems()))
 
 
