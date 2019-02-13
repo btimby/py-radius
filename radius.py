@@ -530,10 +530,7 @@ class Radius(object):
                 if sock is not None:
                     sock.close()
 
-        def attempt(res, attempt):
-            LOGGER.debug(
-                'Sending (as hex): %s',
-                ':'.join(format(ord(c), '02x') for c in send))
+        def attempt(res):
             with connect(res) as c:
                 c.send(send)
                 recv = c.recv(PACKET_MAX)
@@ -545,10 +542,14 @@ class Radius(object):
                 return message.verify(recv)
 
         err = None
+        LOGGER.debug(
+            'Sending (as hex): %s',
+            ':'.join(format(ord(c), '02x') for c in send))
+
         for i in range(self.retries):
             for res in addrs:
                 try:
-                    return attempt(res, i)
+                    return attempt(res)
                 except socket.timeout:
                     LOGGER.warning('Timeout expired on try %s', i)
                 except VerificationError as e:
