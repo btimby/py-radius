@@ -604,6 +604,9 @@ RADIUS = Radius
 
 
 def main():
+    import sys
+    import traceback
+
     host = raw_input("Host [default: 'radius']: ")
     port = raw_input('Port [default: %s]: ' % DEFAULT_PORT)
 
@@ -627,39 +630,37 @@ def main():
             sys.exit(0)
         else:
             sys.exit('Authentication Failed')
+    err = None
 
     try:
         _status(authenticate(secret, username, password, host=host, port=port))
     except ChallengeResponse as e:
-        pass
-    except Exception as e:
+        err = e
+    except Exception:
         traceback.print_exc()
         sys.exit('Authentication Error')
 
     print('RADIUS server replied with a challenge.')
 
-    for m in e.messages:
+    for m in getattr(err, 'messages', []):
         print(' - %s' % m)
 
     response = None
     while not response:
         response = raw_input('Enter your challenge response: ')
 
-    a = Attributes()
-    if e.state:
-        a['State'] = e.state
+    state = getattr(err, 'state', None)
+    a = Attributes({'State': state} if state else {})
 
     try:
         _status(authenticate(secret, username, response, host=host, port=port,
                 attributes=a))
-    except Exception as e:
+    except Exception:
         traceback.print_exc()
         sys.exit('Authentication Error')
 
 
 if __name__ == '__main__':
-    import traceback
-
     LOGGER.addHandler(logging.StreamHandler())
     LOGGER.setLevel(logging.DEBUG)
 
