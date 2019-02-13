@@ -43,9 +43,8 @@ import socket
 import logging
 import struct
 
-from select import select
 from random import randint
-from contextlib import closing, contextmanager
+import contextlib
 
 try:
     from collections import UserDict
@@ -67,7 +66,6 @@ LOGGER.addHandler(logging.NullHandler())
 # -------------------------------
 PACKET_MAX = 4096
 DEFAULT_PORT = 1812
-DEFAULT_AF = socket.AF_INET
 DEFAULT_RETRIES = 3
 DEFAULT_TIMEOUT = 5
 # -------------------------------
@@ -265,8 +263,7 @@ def join(items):
     return b''.join(items)
 
 
-def authenticate(secret, username, password, host=None, port=None, af=None,
-                 **kwargs):
+def authenticate(secret, username, password, host=None, port=None, **kwargs):
     """
     Authenticate the user against a radius server.
 
@@ -277,15 +274,13 @@ def authenticate(secret, username, password, host=None, port=None, af=None,
 
     Can raise either NoResponse or SocketError
     """
-    # Pass host, port and af to the Radius instance. But ONLY if they are defined,
+    # Pass host/port to the Radius instance. But ONLY if they are defined,
     # otherwise we allow Radius to use the defaults for the kwargs.
     rkwargs = {}
     if host:
         rkwargs['host'] = host
     if port:
         rkwargs['port'] = port
-    if af:
-        rkwargs['af'] = af
     # Additional kwargs (like attributes) are sent to Radius.authenticate().
     return Radius(secret, **rkwargs).authenticate(username, password, **kwargs)
 
@@ -409,6 +404,10 @@ class Attributes(UserDict):
         return Attributes(attrs)
 
 
+class VerificationError(AssertionError):
+    pass
+
+
 class Message(object):
     """
     Represents a radius protocol packet.
@@ -474,10 +473,12 @@ class Message(object):
         unpacks it.
         """
         id = ord(data[1])
-        assert self.id == id, 'ID mismatch (%s != %s)' % (self.id, id)
+        if self.id != id:
+            raise VerificationError('ID mismatch (%s != %s)' % (self.id, id))
         signature = md5(
             data[:4] + self.authenticator + data[20:] + self.secret).digest()
-        assert signature == data[4:20], 'Invalid authenticator'
+        if signature != data[4:20]:
+            raise VerificationError('Invalid authenticator')
         return Message.unpack(self.secret, data)
 
 
@@ -486,14 +487,13 @@ class Radius(object):
     Radius client implementation.
     """
 
-    def __init__(self, secret, host='radius', port=DEFAULT_PORT, af=DEFAULT_AF,
+    def __init__(self, secret, host='radius', port=DEFAULT_PORT,
                  retries=DEFAULT_RETRIES, timeout=DEFAULT_TIMEOUT):
         self._secret = bytes_safe(secret)
         self.retries = retries
         self.timeout = timeout
         self._host = host
         self._port = port
-        self._af = af
 
     @property
     def host(self):
@@ -504,54 +504,62 @@ class Radius(object):
         return self._port
 
     @property
-    def af(self):
-        return self._af
-    
-    @property
     def secret(self):
         return self._secret
-
-    @contextmanager
-    def connect(self):
-        with closing(socket.socket(self.af, socket.SOCK_DGRAM)) as c:
-            c.connect((self.host, self.port))
-            LOGGER.debug('Connected to %s:%s', self.host, self.port)
-            yield c
 
     def send_message(self, message):
         send = message.pack()
 
-        try:
-            with self.connect() as c:
-                for i in range(self.retries):
-                    LOGGER.debug(
-                        'Sending (as hex): %s',
-                        ':'.join(format(ord(c), '02x') for c in send))
+        addrs = socket.getaddrinfo(
+            self.host,
+            self.port,
+            0,
+            socket.SOCK_DGRAM,
+        )
 
-                    c.send(send)
+        @contextlib.contextmanager
+        def connect(res):
+            af, socktype, proto, canonname, sa = res
+            sock = None
+            try:
+                sock = socket.socket(af, socktype, proto)
+                sock.settimeout(self.timeout)
+                sock.connect(sa)
+                yield sock
+            finally:
+                if sock is not None:
+                    sock.close()
 
-                    r, w, x = select([c], [], [], self.timeout)
-                    if c in r:
-                        recv = c.recv(PACKET_MAX)
-                    else:
-                        # No data available on our socket. Try again.
-                        LOGGER.warning('Timeout expired on try %s', i)
-                        continue
+        def attempt(res, attempt):
+            LOGGER.debug(
+                'Sending (as hex): %s',
+                ':'.join(format(ord(c), '02x') for c in send))
+            with connect(res) as c:
+                c.send(send)
+                recv = c.recv(PACKET_MAX)
 
-                    LOGGER.debug(
-                        'Received (as hex): %s',
-                        ':'.join(format(ord(c), '02x') for c in recv))
+                LOGGER.debug(
+                    'Received (as hex): %s',
+                    ':'.join(format(ord(c), '02x') for c in recv))
 
-                    try:
-                        return message.verify(recv)
-                    except AssertionError as e:
-                        LOGGER.warning('Invalid response discarded %s', e)
-                        # Silently discard invalid replies (as RFC states).
-                        continue
+                return message.verify(recv)
 
-        except socket.error as e:  # SocketError
-            LOGGER.debug('Socket error', exc_info=True)
-            raise SocketError(e)
+        err = None
+        for i in range(self.retries):
+            for res in addrs:
+                try:
+                    return attempt(res, i)
+                except socket.timeout:
+                    LOGGER.warning('Timeout expired on try %s', i)
+                except VerificationError as e:
+                    LOGGER.warning('Invalid response discarded %s', e)
+                    # Silently discard invalid replies (as RFC states).
+                except socket.error as e:
+                    LOGGER.debug('Socket error', exc_info=True)
+                    err = e
+
+        if err is not None:
+            raise SocketError(err)
 
         LOGGER.error('Request timed out after %s tries', i)
         raise NoResponse()
@@ -618,11 +626,9 @@ def main():
 
     host = raw_input("Host [default: 'radius']: ")
     port = raw_input('Port [default: %s]: ' % DEFAULT_PORT)
-    af = raw_input('Address family [default: 4]: ')
 
     host = host if host else 'radius'
     port = int(port) if port else DEFAULT_PORT
-    af = socket.AF_INET6 if af == '6' else DEFAULT_AF
 
     secret = username = password = None
 
@@ -644,8 +650,7 @@ def main():
     err = None
 
     try:
-        _status(authenticate(secret, username, password, host=host, port=port,
-                             af=af))
+        _status(authenticate(secret, username, password, host=host, port=port))
     except ChallengeResponse as e:
         err = e
     except Exception:
@@ -666,7 +671,7 @@ def main():
 
     try:
         _status(authenticate(secret, username, response, host=host, port=port,
-                             af=af, attributes=a))
+                attributes=a))
     except Exception:
         traceback.print_exc()
         sys.exit('Authentication Error')
