@@ -38,13 +38,13 @@ Homepage at http://github.com/btimby/py-radius/
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
+import sys
 import socket
 import logging
 import struct
 
-from select import select
 from random import randint
-from contextlib import closing, contextmanager
+import contextlib
 
 try:
     from collections import UserDict
@@ -55,8 +55,6 @@ try:
     from hashlib import md5
 except ImportError:
     from md5 import new as md5
-
-from six import PY3
 
 
 __version__ = '2.0.2'
@@ -240,6 +238,7 @@ class SocketError(NoResponse):
     pass
 
 
+PY3 = sys.version_info > (3, 0, 0)
 if PY3:
     # These functions are used to act upon strings in Python2, but bytes in
     # Python3. Their functions are not necessary in PY3, so we NOOP them.
@@ -405,6 +404,10 @@ class Attributes(UserDict):
         return Attributes(attrs)
 
 
+class VerificationError(AssertionError):
+    pass
+
+
 class Message(object):
     """
     Represents a radius protocol packet.
@@ -470,10 +473,12 @@ class Message(object):
         unpacks it.
         """
         id = ord(data[1])
-        assert self.id == id, 'ID mismatch (%s != %s)' % (self.id, id)
+        if self.id != id:
+            raise VerificationError('ID mismatch (%s != %s)' % (self.id, id))
         signature = md5(
             data[:4] + self.authenticator + data[20:] + self.secret).digest()
-        assert signature == data[4:20], 'Invalid authenticator'
+        if signature != data[4:20]:
+            raise VerificationError('Invalid authenticator')
         return Message.unpack(self.secret, data)
 
 
@@ -502,47 +507,60 @@ class Radius(object):
     def secret(self):
         return self._secret
 
-    @contextmanager
-    def connect(self):
-        with closing(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as c:
-            c.connect((self.host, self.port))
-            LOGGER.debug('Connected to %s:%s', self.host, self.port)
-            yield c
-
     def send_message(self, message):
         send = message.pack()
 
-        try:
-            with self.connect() as c:
-                for i in range(self.retries):
-                    LOGGER.debug(
-                        'Sending (as hex): %s',
-                        ':'.join(format(ord(c), '02x') for c in send))
+        addrs = socket.getaddrinfo(
+            self.host,
+            self.port,
+            0,
+            socket.SOCK_DGRAM,
+        )
 
-                    c.send(send)
+        @contextlib.contextmanager
+        def connect(res):
+            af, socktype, proto, canonname, sa = res
+            sock = None
+            try:
+                sock = socket.socket(af, socktype, proto)
+                sock.settimeout(self.timeout)
+                sock.connect(sa)
+                yield sock
+            finally:
+                if sock is not None:
+                    sock.close()
 
-                    r, w, x = select([c], [], [], self.timeout)
-                    if c in r:
-                        recv = c.recv(PACKET_MAX)
-                    else:
-                        # No data available on our socket. Try again.
-                        LOGGER.warning('Timeout expired on try %s', i)
-                        continue
+        def attempt(res):
+            with connect(res) as c:
+                c.send(send)
+                recv = c.recv(PACKET_MAX)
 
-                    LOGGER.debug(
-                        'Received (as hex): %s',
-                        ':'.join(format(ord(c), '02x') for c in recv))
+                LOGGER.debug(
+                    'Received (as hex): %s',
+                    ':'.join(format(ord(c), '02x') for c in recv))
 
-                    try:
-                        return message.verify(recv)
-                    except AssertionError as e:
-                        LOGGER.warning('Invalid response discarded %s', e)
-                        # Silently discard invalid replies (as RFC states).
-                        continue
+                return message.verify(recv)
 
-        except socket.error as e:  # SocketError
-            LOGGER.debug('Socket error', exc_info=True)
-            raise SocketError(e)
+        err = None
+        LOGGER.debug(
+            'Sending (as hex): %s',
+            ':'.join(format(ord(c), '02x') for c in send))
+
+        for i in range(self.retries):
+            for res in addrs:
+                try:
+                    return attempt(res)
+                except socket.timeout:
+                    LOGGER.warning('Timeout expired on try %s', i)
+                except VerificationError as e:
+                    LOGGER.warning('Invalid response discarded %s', e)
+                    # Silently discard invalid replies (as RFC states).
+                except socket.error as e:
+                    LOGGER.debug('Socket error', exc_info=True)
+                    err = e
+
+        if err is not None:
+            raise SocketError(err)
 
         LOGGER.error('Request timed out after %s tries', i)
         raise NoResponse()
@@ -604,6 +622,9 @@ RADIUS = Radius
 
 
 def main():
+    import sys
+    import traceback
+
     host = raw_input("Host [default: 'radius']: ")
     port = raw_input('Port [default: %s]: ' % DEFAULT_PORT)
 
@@ -627,40 +648,37 @@ def main():
             sys.exit(0)
         else:
             sys.exit('Authentication Failed')
+    err = None
 
     try:
         _status(authenticate(secret, username, password, host=host, port=port))
     except ChallengeResponse as e:
-        pass
-    except Exception as e:
+        err = e
+    except Exception:
         traceback.print_exc()
         sys.exit('Authentication Error')
 
     print('RADIUS server replied with a challenge.')
 
-    for m in e.messages:
+    for m in getattr(err, 'messages', []):
         print(' - %s' % m)
 
     response = None
     while not response:
         response = raw_input('Enter your challenge response: ')
 
-    a = Attributes()
-    if e.state:
-        a['State'] = e.state
+    state = getattr(err, 'state', None)
+    a = Attributes({'State': state} if state else {})
 
     try:
         _status(authenticate(secret, username, response, host=host, port=port,
                 attributes=a))
-    except Exception as e:
+    except Exception:
         traceback.print_exc()
         sys.exit('Authentication Error')
 
 
 if __name__ == '__main__':
-    import sys
-    import traceback
-
     LOGGER.addHandler(logging.StreamHandler())
     LOGGER.setLevel(logging.DEBUG)
 
