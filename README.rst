@@ -14,7 +14,7 @@ py-radius
 
 RADIUS authentication module for Python 2.7.13+
 
-\(c) 1999 Stuart Bishop <zen@shangri-la.dropbear.id.au>
+\(c) 1999 Stuart Bishop <stuart@stuartbishop.net>
 
 This module provides basic RADIUS client capabilities, allowing your Python
 code to authenticate against any RFC2138 compliant RADIUS server.

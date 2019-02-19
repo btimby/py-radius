@@ -6,7 +6,7 @@ user with or without challenge/response, yet remain RFC2865 compliant (I hope).
 Homepage at http://github.com/btimby/py-radius/
 '''
 
-# Copyright (c) 1999, Stuart Bishop <zen@shangri-la.dropbear.id.au>
+# Copyright (c) 1999, Stuart Bishop <stuart@stuartbishop.net>
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
