@@ -18,8 +18,10 @@ after_success:
 - make coveralls
 deploy:
   provider: pypi
+  distributions: "sdist bdist_wheel"
   user: "Ben.Timby"
   password:
     secure: "CwfEq0SYcw1CpNrdjMFD/R8rCZVWwTeDZQZj6Z4LIi2PUd++BdDcB9S/NVCjChxD4C9CrausH/iFoPnBYFyNf5c13BTxuo5oFC7PUY99a/PjHR8vjGC48lj5KGE4W5O2qQQkgKojcP6rD8e1YPmaO9miRKIT9DLRpIqnSW4p+jI="
   on:
     tags: true
+    python: "3.7"

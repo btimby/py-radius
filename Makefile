@@ -5,7 +5,7 @@ lint:
 	flake8 radius.py
 
 dependencies:
-	pip install coverage coveralls flake8
+	pip install coverage coveralls flake8 wheel
 
 travis: lint test
 
