@@ -10,22 +10,20 @@ versrel = version + '-' + release
 download_url = 'https://github.com/downloads/btimby/' + name + \
                            '/' + name + '-' + versrel + '.tar.gz'
 
-with open('LICENSE', 'r') as l:
-    license = l.read()
+with open('README.rst', 'r') as rm:
+    long_description = rm.read()
 
 setup(
     name = name,
     version = versrel,
     description = 'RADIUS authentication module',
-    long_description = 'A pure Python module that implements client side RADIUS ' \
-                       'authentication, as defined by RFC2865.',
+    long_description=long_description,
     author = 'Stuart Bishop',
     author_email = 'zen@shangri-la.dropbear.id.au',
     maintainer = 'Ben Timby',
     maintainer_email = 'btimby@gmail.com',
     url = 'http://github.com/btimby/' + name + '/',
     download_url = download_url,
-    license = license,
     py_modules = ["radius"],
     classifiers = [
         'License :: OSI Approved :: MIT License',
