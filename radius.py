@@ -546,7 +546,7 @@ class Radius(object):
             'Sending (as hex): %s',
             ':'.join(format(ord(c), '02x') for c in send))
 
-        for i in range(self.retries):
+        for i in range(1, self.retries+1):
             for res in addrs:
                 try:
                     return attempt(res)
