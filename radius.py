@@ -262,6 +262,8 @@ def join(items):
     """
     return b''.join(items)
 
+def raw_input(x):
+  input(x)
 
 def authenticate(secret, username, password, host=None, port=None, **kwargs):
     """
