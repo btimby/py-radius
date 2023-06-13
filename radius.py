@@ -565,7 +565,7 @@ class Radius(object):
         LOGGER.error('Request timed out after %s tries', i)
         raise NoResponse()
 
-    def access_request_message(self, username, password, **kwargs):
+    def access_request_message(self, username, password, nas_id=None, **kwargs):
         username = bytes_safe(username)
         password = bytes_safe(password)
 
@@ -573,6 +573,9 @@ class Radius(object):
         message.attributes['User-Name'] = username
         message.attributes['User-Password'] = \
             radcrypt(self.secret, message.authenticator, password)
+        if nas_id is not None:
+            nas_id = bytes_safe(nas_id)
+            message.attributes['NAS-Identifier'] = nas_id
 
         return message
 
